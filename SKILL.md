@@ -51,7 +51,7 @@ trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发
    - 目录已存在时保留已有文件，仅补充缺失项
 
 7. **版本管理** (`version_manager.py`)
-   - 版本号格式：V1.0 / V1.1（支持自动更新）
+   - 版本号格式：Semantic Versioning（1.0.x，支持自动更新）
    - 每次运行脚本时自动检查新版本
    - 发现新版本时自动更新脚本文件，保留用户数据
    - 更新前自动创建备份（`.backup/<version>/`），支持回退
@@ -82,7 +82,7 @@ cd scripts && python3 setup.py init
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
-| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.0"` |
+| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.5"` |
 | `OBSIDIAN_VAULT` | Obsidian 笔记库根目录 | `~/Documents/MyVault` |
 | `INVOICE_BASE_REL` | 发票整理相对路径 | `个人行程与报销/01 发票整理` |
 | `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程与个人报销单` |
@@ -163,7 +163,7 @@ cd scripts && python3 version_manager.py
 如果更新后出现问题，可从备份目录恢复：
 
 ```bash
-cd scripts/invoice-trip-organizer/.backup/1.0.0
+cd scripts/invoice-trip-organizer/.backup/1.0.4
 cp *.py ../../
 ```
 
@@ -176,7 +176,7 @@ cp *.py ../../
 
 ### 发布新版本（开发者）
 
-1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `V1.0` → `V1.1`）
+1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.4` → `1.0.5`）
 2. 在 `scripts/invoice-trip-organizer/CHANGELOG.md` 中记录变更
 3. 如有新增配置项，更新 `config_template.py`
 4. 用户下次运行任意脚本时，自动检测并更新
