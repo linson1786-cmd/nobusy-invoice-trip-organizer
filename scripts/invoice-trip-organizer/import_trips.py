@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-导入行程 - 批量导入行程数据
+新增行程 - 批量导入行程数据
 弹出文本输入窗口，粘贴行程数据（Tab分隔），自动创建行程文件夹
 
 数据格式（支持多种日期格式）：
@@ -75,7 +75,7 @@ def show_input_dialog_tkinter():
     result = {"text": None, "submitted": False}
 
     root = tk.Tk()
-    root.title("导入行程数据")
+    root.title("新增行程数据")
     root.geometry("680x420")
     root.attributes('-topmost', True)
 
@@ -363,7 +363,7 @@ def main():
         sys.exit(1)
 
     print('=' * 50, flush=True)
-    print('导入行程数据', flush=True)
+    print('新增行程数据', flush=True)
     print(f'行程根目录: {trip_root}', flush=True)
     print('=' * 50, flush=True)
     print()
