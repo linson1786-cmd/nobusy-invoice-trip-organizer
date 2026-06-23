@@ -1,7 +1,7 @@
 ---
 name: invoice-trip-organizer
-description: 个人行程与报销 V1.0.8 | 配置化版本，支持分享与在线升级
-version: 1.0.8
+description: 个人行程与报销 V1.0.9 | 配置化版本，支持分享与在线升级
+version: 1.0.9
 trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发票整理", "行程整理", "导入", "导入文件", "新增行程", "初始化", "初始化设置", "重置", "下载发票", "收发票", "升级", "检查更新"]
 ---
 
@@ -63,7 +63,7 @@ trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发
 本项目独立管理，路径：
 `/Users/linson/Documents/Personage/AI Tools Learning/WorkBuddy Skills/`
 
-当前版本：**V1.0.8**
+当前版本：**V1.0.9**
 
 ## 首次使用
 
@@ -114,7 +114,7 @@ cd scripts/invoice-trip-organizer && python3 setup.py init --base-dir /tmp/invoi
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
-| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.8"` |
+| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.9"` |
 | `OBSIDIAN_VAULT` | Obsidian 笔记库根目录 | `~/Documents/MyVault` |
 | `INVOICE_BASE_REL` | 发票整理相对路径 | `个人行程与报销/01 发票整理` |
 | `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程与员工报销单` |
@@ -208,7 +208,7 @@ cp *.py ../../
 
 ### 发布新版本（开发者）
 
-1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.7` → `1.0.8`）
+1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.8` → `1.0.9`）
 2. 在 `scripts/invoice-trip-organizer/CHANGELOG.md` 中记录变更
 3. 如有新增配置项，更新 `config_template.py`
 4. 用户下次运行任意脚本时，自动检测并更新

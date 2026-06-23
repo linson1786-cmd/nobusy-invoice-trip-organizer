@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 新增行程 - 批量导入行程数据
-支持两种输入方式：
-  1. 管道输入（推荐，AI 对话场景）：echo "数据" | python3 import_trips.py
-  2. GUI 窗口（直接终端运行）：python3 import_trips.py
+支持三种输入方式（优先级从高到低）：
+  1. 文件输入：python3 import_trips.py --file trips.txt
+  2. 管道输入（推荐，AI 对话场景）：echo "数据" | python3 import_trips.py
+  3. GUI 窗口（直接终端运行）：python3 import_trips.py
 
-数据格式（支持多种日期格式）：
+数据格式（支持多种日期格式，Tab 分隔）：
   开始日期	结束日期	行程
   2026-01-04	2026-01-09	广州-上海-南通-杭州-成都-重庆-广州
   2026/3/11	2026/3/14	广州-中山-深圳-上海-苏州-上海-广州
@@ -16,6 +17,7 @@ import os
 import sys
 import re
 import platform
+import argparse
 import importlib.util
 from datetime import datetime
 
@@ -354,6 +356,11 @@ def main():
     except Exception:
         pass
 
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='新增行程 - 批量导入行程数据')
+    parser.add_argument('--file', '-f', help='从指定文件读取行程数据（Tab 分隔）')
+    args = parser.parse_args()
+
     config = load_config()
     if not config:
         print('错误: 未找到 config.py，请先运行「初始化设置」', flush=True)
@@ -370,9 +377,24 @@ def main():
     print('=' * 50, flush=True)
     print()
 
-    # 1. 获取输入数据：优先管道输入，回退 GUI 窗口
+    # 1. 获取输入数据：优先 --file，其次管道输入，最后 GUI 窗口
     text = None
-    if not sys.stdin.isatty():
+
+    if args.file:
+        # 文件输入模式
+        file_path = os.path.expanduser(args.file)
+        if not os.path.exists(file_path):
+            print(f'错误: 文件不存在: {file_path}', flush=True)
+            sys.exit(1)
+        with open(file_path, 'r', encoding='utf-8') as f:
+            text = f.read().strip()
+        if text:
+            print(f'✅ 从文件读取行程数据: {file_path}', flush=True)
+        else:
+            print(f'文件内容为空: {file_path}', flush=True)
+            sys.exit(0)
+
+    if not text and not sys.stdin.isatty():
         # 管道输入（AI 对话场景 / 命令行管道）
         text = sys.stdin.read().strip()
         if text:

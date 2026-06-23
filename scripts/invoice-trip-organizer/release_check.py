@@ -12,8 +12,10 @@ Skill 发布前检查。
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import py_compile
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -206,6 +208,74 @@ def check_install_versions() -> bool:
     return passed
 
 
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def check_workbuddy_script_sync() -> bool:
+    deployed_scripts = WORKBUDDY_SKILL_DIR / "scripts"
+    if not deployed_scripts.exists():
+        warn("未发现 WorkBuddy scripts 目录，跳过源码/安装一致性检查")
+        return True
+
+    passed = True
+    for source in sorted(SCRIPT_DIR.glob("*")):
+        if source.name == "config.py" or source.is_dir():
+            continue
+        target = deployed_scripts / source.name
+        if not target.exists():
+            fail(f"WorkBuddy 安装目录缺少脚本：{source.name}")
+            passed = False
+            continue
+        if sha256(source) != sha256(target):
+            fail(f"WorkBuddy 安装脚本与源码不一致：{source.name}")
+            passed = False
+    if passed:
+        ok("WorkBuddy 安装脚本与源码一致")
+    return passed
+
+
+def check_stdin_trip_import() -> bool:
+    demo_root = Path("/private/tmp/invoice-trip-release-stdin-check")
+    if demo_root.exists():
+        shutil.rmtree(demo_root)
+
+    init_result = run([
+        "python3",
+        str(SCRIPT_DIR / "setup.py"),
+        "init",
+        "--base-dir",
+        str(demo_root),
+    ])
+    if init_result.returncode != 0:
+        fail("stdin 验证前初始化失败")
+        print(init_result.stdout.strip())
+        print(init_result.stderr.strip())
+        return False
+
+    workspace_scripts = demo_root / "个人行程与报销" / "scripts"
+    input_text = "开始日期\t结束日期\t行程\n2026-01-04\t2026-01-06\t广州-上海-广州\n"
+    result = subprocess.run(
+        ["python3", "import_trips.py"],
+        cwd=str(workspace_scripts),
+        input=input_text,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        fail("stdin 管道导入执行失败")
+        print(result.stdout.strip())
+        print(result.stderr.strip())
+        return False
+    if "✅ 从管道接收到行程数据" not in result.stdout or "导入完成: 新增 1 条" not in result.stdout:
+        fail("stdin 管道导入输出不符合预期")
+        print(result.stdout.strip())
+        print(result.stderr.strip())
+        return False
+    ok("stdin 管道导入端到端验证通过")
+    return True
+
+
 def check_codex_validate() -> bool:
     validator = Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
     if not validator.exists() or not CODEX_SKILL_DIR.exists():
@@ -249,7 +319,9 @@ def main() -> int:
         check_required_resources(),
         check_forbidden_text(),
         check_install_versions(),
+        check_workbuddy_script_sync(),
         check_codex_validate(),
+        check_stdin_trip_import(),
         check_git_clean(args.allow_dirty),
     ]
     if all(checks):

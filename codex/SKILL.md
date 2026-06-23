@@ -1,6 +1,6 @@
 ---
 name: invoice-trip-organizer
-description: "Organize personal invoice and trip reimbursement files with local scripts. Use when Codex needs to inspect, validate, install, run, or modify the NoBusy invoice-trip-organizer workflow; classify invoices; rename files; generate trip/reimbursement summaries; manage demo-safe data; or update the related GitHub project. Do not use for real reimbursement submission, real email authorization, or approval-system actions without explicit user confirmation. Current version: 1.0.8."
+description: "Organize personal invoice and trip reimbursement files with local scripts. Use when Codex needs to inspect, validate, install, run, or modify the NoBusy invoice-trip-organizer workflow; classify invoices; rename files; generate trip/reimbursement summaries; manage demo-safe data; or update the related GitHub project. Do not use for real reimbursement submission, real email authorization, or approval-system actions without explicit user confirmation. Current version: 1.0.9."
 ---
 
 # invoice-trip-organizer
@@ -41,6 +41,7 @@ python3 scripts/invoice-trip-organizer/setup.py init --base-dir /private/tmp/inv
 Demo-safe trip import:
 
 ```bash
+cd /private/tmp/invoice-trip-demo/个人行程与报销/scripts
 printf '开始日期\t结束日期\t行程\n2026-01-04\t2026-01-06\t广州-上海-广州\n' | python3 import_trips.py
 ```
 

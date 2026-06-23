@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.9 - 2026-06-24
+
+- Fixed source drift in `import_trips.py` by adding the documented `--file/-f` mode to the source directory.
+- Kept stdin pipe input explicit and verified in the release gate.
+- Fixed Codex Skill demo command to run from the initialized workspace script directory.
+- Added release checks to detect source/install drift for WorkBuddy deployed scripts.
+
 ## v1.0.8 - 2026-06-24
 
 - Added `release_check.py` as a repeatable release gate for version, tracked files, required resources, Python compilation, local installs, and Codex validation.
