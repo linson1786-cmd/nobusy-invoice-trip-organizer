@@ -1,7 +1,7 @@
 ---
 name: invoice-trip-organizer
-description: 个人行程与报销 V1.0.7 | 配置化版本，支持分享与在线升级
-version: 1.0.7
+description: 个人行程与报销 V1.0.8 | 配置化版本，支持分享与在线升级
+version: 1.0.8
 trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发票整理", "行程整理", "导入", "导入文件", "新增行程", "初始化", "初始化设置", "重置", "下载发票", "收发票", "升级", "检查更新"]
 ---
 
@@ -63,7 +63,7 @@ trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发
 本项目独立管理，路径：
 `/Users/linson/Documents/Personage/AI Tools Learning/WorkBuddy Skills/`
 
-当前版本：**V1.0.7**
+当前版本：**V1.0.8**
 
 ## 首次使用
 
@@ -72,12 +72,18 @@ trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发
 或手动运行：
 
 ```bash
-cd scripts && python3 setup.py init
+cd scripts/invoice-trip-organizer && python3 setup.py init
+```
+
+无界面环境可指定父目录：
+
+```bash
+cd scripts/invoice-trip-organizer && python3 setup.py init --base-dir /tmp/invoice-trip-demo
 ```
 
 初始化完成后：
 1. 把发票文件放入 `01 待分类/` 目录
-2. 对我说「发票整理」或运行 `cd scripts && python3 invoice_auto_organizer.py`
+2. 对我说「发票整理」或运行 `cd scripts/invoice-trip-organizer && python3 invoice_auto_organizer.py`
 
 ## 新增行程操作指引（AI 必读）
 
@@ -108,7 +114,7 @@ cd scripts && python3 setup.py init
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
-| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.7"` |
+| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.8"` |
 | `OBSIDIAN_VAULT` | Obsidian 笔记库根目录 | `~/Documents/MyVault` |
 | `INVOICE_BASE_REL` | 发票整理相对路径 | `个人行程与报销/01 发票整理` |
 | `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程与员工报销单` |
@@ -175,13 +181,13 @@ YYYY-MM-DD_类别_金额[_出发-到达][_发票号后4位]_MMDD_WB/YB_NNN.ext
 ### 手动检查更新
 
 ```bash
-cd scripts && python3 setup.py update
+cd scripts/invoice-trip-organizer && python3 setup.py update
 ```
 
 或运行 `version_manager.py`：
 
 ```bash
-cd scripts && python3 version_manager.py
+cd scripts/invoice-trip-organizer && python3 version_manager.py
 ```
 
 ### 版本回退
@@ -202,7 +208,7 @@ cp *.py ../../
 
 ### 发布新版本（开发者）
 
-1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.6` → `1.0.7`）
+1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.7` → `1.0.8`）
 2. 在 `scripts/invoice-trip-organizer/CHANGELOG.md` 中记录变更
 3. 如有新增配置项，更新 `config_template.py`
 4. 用户下次运行任意脚本时，自动检测并更新
@@ -273,3 +279,4 @@ python3 ~/.workbuddy/skills/invoice-trip-organizer/scripts/deploy.py --status
 | `setup.py` | 初始化设置 & 重置 & 更新脚本（入口含版本检查） |
 | `docs/SOP-发票文件命名标准.md` | 命名规范详细文档 |
 | `audit_03_done.py` | 03 已完成文件排查脚本（维护用） |
+| `release_check.py` | 发布前检查脚本（版本、敏感文件、编译、安装一致性） |

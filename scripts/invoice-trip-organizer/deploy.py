@@ -18,7 +18,7 @@
   python3 deploy.py --upgrade    # 从 GitHub 拉取最新版本并自动部署
   python3 deploy.py --check-update  # 仅检查是否有新版本可用
 
-版本号格式：Semantic Versioning（1.0.6）
+版本号格式：Semantic Versioning（1.0.8）
 """
 
 import os
@@ -56,6 +56,7 @@ SCRIPT_FILES = [
     "setup.py",
     "init.py",
     "audit_03_done.py",
+    "release_check.py",
     "config_template.py",
     "deploy.py",
     "VERSION",

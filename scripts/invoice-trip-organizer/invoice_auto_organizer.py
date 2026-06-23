@@ -42,19 +42,18 @@ try:
 except ImportError:
     OCR_AVAILABLE = False
 
-# ===== 默认配置 (与喵老板环境兼容，可被 config.py 覆盖) =====
-BASE_ROOT = os.path.expanduser(
-    "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/NoBusy-Demo/个人行程与报销/01 发票整理"
-)
-INPUT_DIR = os.path.join(BASE_ROOT, "01 待分类")
-DONE_DIR = os.path.join(BASE_ROOT, "03 已完成")
-REVIEW_DIR = os.path.join(BASE_ROOT, "02 待核实")
-LOG_FILE = os.path.join(BASE_ROOT, ".organizer_log.json")
+# ===== 配置由 config.py 提供；未初始化时保持为空，运行前给出明确提示 =====
+BASE_ROOT = ""
+INPUT_DIR = ""
+DONE_DIR = ""
+REVIEW_DIR = ""
+LOG_FILE = ""
 
 VALID_CATEGORIES = ["餐饮", "住宿", "机票", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "礼品", "结账单", "其他",
                     "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"]
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.heic', '.bmp', '.tiff', '.tif', '.webp']
 PROCESSABLE_EXTENSIONS = ['.pdf'] + IMAGE_EXTENSIONS
+BUSINESS_FILE_EXTENSIONS = set(PROCESSABLE_EXTENSIONS + ['.ofd', '.xml'])
 
 # ===== 尝试从 config.py 覆盖配置 =====
 try:
@@ -82,9 +81,34 @@ try:
         )
         print(f"✅ 已从 config.py 读取配置 ({len(_overridden)} 项，INPUT_DIR={INPUT_DIR})")
     else:
-        pass  # 使用上方默认值
+        pass
 except Exception as e:
-    print(f"⚠️ 读取 config.py 失败: {e}，使用内置默认配置")
+    print(f"⚠️ 读取 config.py 失败: {e}")
+
+
+def ensure_configured():
+    """确认已完成初始化并存在有效路径配置。"""
+    required = {
+        "BASE_ROOT": BASE_ROOT,
+        "INPUT_DIR": INPUT_DIR,
+        "DONE_DIR": DONE_DIR,
+        "REVIEW_DIR": REVIEW_DIR,
+    }
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        print("❌ 未完成初始化：缺少路径配置 " + ", ".join(missing))
+        print("请先运行：python3 setup.py init")
+        return False
+    return True
+
+
+def is_business_file(path):
+    """判断是否为待处理/已归档的发票业务文件，排除日志和台账。"""
+    return (
+        os.path.isfile(path)
+        and not os.path.basename(path).startswith('.')
+        and os.path.splitext(path)[1].lower() in BUSINESS_FILE_EXTENSIONS
+    )
 
 # 标准文件名正则 (确保在 config 覆盖后是最新版本)
 STANDARD_NAME_RE = re.compile(
@@ -1953,6 +1977,9 @@ def main():
     except Exception:
         pass
 
+    if not ensure_configured():
+        return
+
     os.makedirs(DONE_DIR, exist_ok=True)
     os.makedirs(REVIEW_DIR, exist_ok=True)
 
@@ -2005,9 +2032,14 @@ def main():
         print(f"\n✅ 完成。")
 
     # 最终状态
-    inbox_count = len([f for f in os.listdir(INPUT_DIR) if not f.startswith('.')]) if os.path.isdir(INPUT_DIR) else 0
-    review_count = len([f for f in os.listdir(REVIEW_DIR) if not f.startswith('.') and os.path.isfile(os.path.join(REVIEW_DIR, f))]) if os.path.isdir(REVIEW_DIR) else 0
-    done_count = sum(len(files) for _, _, files in os.walk(DONE_DIR)) if os.path.isdir(DONE_DIR) else 0
+    inbox_count = sum(1 for f in os.listdir(INPUT_DIR) if is_business_file(os.path.join(INPUT_DIR, f))) if os.path.isdir(INPUT_DIR) else 0
+    review_count = sum(1 for f in os.listdir(REVIEW_DIR) if is_business_file(os.path.join(REVIEW_DIR, f))) if os.path.isdir(REVIEW_DIR) else 0
+    done_count = sum(
+        1
+        for root, _, files in os.walk(DONE_DIR)
+        for f in files
+        if is_business_file(os.path.join(root, f))
+    ) if os.path.isdir(DONE_DIR) else 0
     print(f"\n📁 当前状态: 01待分类={inbox_count} | 02待核实={review_count} | 03已完成={done_count}")
 
     # 更新台账
@@ -2027,8 +2059,9 @@ def main():
 def link_to_trips(success_list):
     """将新归档发票自动关联到已有行程，复制到对应附件目录"""
     # 从 config 读取行程根目录 (可被 config.py 覆盖)
-    trip_root = globals().get('TRIP_ROOT', 
-        os.path.expanduser("~/Library/Mobile Documents/iCloud~md~obsidian/Documents/NoBusy-Demo/个人行程与报销/02 行程与个人报销单"))
+    trip_root = globals().get('TRIP_ROOT', "")
+    if not trip_root:
+        return
     # 发票类别→附件子目录映射 (从 config 读取，可被 config.py 覆盖)
     if 'CAT_TO_SUBDIR' in dir():
         cat_to_subdir = CAT_TO_SUBDIR
@@ -2188,8 +2221,8 @@ def _update_trip_invoice_lists(trips):
                 md += f"| {seq:03d} | {i['date']} | {i['category']} | ¥{float(i['amount']):,.2f} | {remark} | {i.get('status', 'WB')} | {i['filename']} |\n"
             md += "\n"
 
-        md += f"\n> 📁 附件目录: [[个人行程与报销/02 行程与个人报销单/2026 年/{trip['month_name']}/{trip['folder_name']}/02-发票文件|02-发票文件]]\n"
-        md += f"> 📝 行程详情: [[个人行程与报销/02 行程与个人报销单/2026 年/{trip['month_name']}/{trip['folder_name']}/01-行程详情|01-行程详情]]\n"
+        md += f"\n> 📁 附件目录: [[个人行程与报销/02 行程与员工报销单/2026 年/{trip['month_name']}/{trip['folder_name']}/02-发票文件|02-发票文件]]\n"
+        md += f"> 📝 行程详情: [[个人行程与报销/02 行程与员工报销单/2026 年/{trip['month_name']}/{trip['folder_name']}/01-行程详情|01-行程详情]]\n"
 
         md_path = os.path.join(invoice_dir, "发票文件清单.md")
         with open(md_path, 'w', encoding='utf-8') as f:

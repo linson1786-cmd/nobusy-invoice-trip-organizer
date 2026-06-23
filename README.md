@@ -1,6 +1,6 @@
 # 个人行程与报销 Skill
 
-> **版本**: V1.0.7  
+> **版本**: V1.0.8  
 > **创建日期**: 2026-06-23  
 > **项目归属**: NoBusy 别虾忙｜AI 管理实战  
 > **负责人**: Linson  
@@ -66,6 +66,12 @@ python3 setup.py init
 
 弹窗选择父目录后，脚本自动创建目录结构、复制 SOP 文档、生成 config.py。
 
+自动化测试或无界面环境可指定父目录：
+
+```bash
+python3 setup.py init --base-dir /tmp/invoice-trip-demo
+```
+
 ### 3. 配置邮箱（可选）
 
 运行 `download_invoices.py` 时会弹出邮箱选择/注册界面，账户信息保存在 `~/.invoice-trip/email_accounts.json`，支持多个邮箱。
@@ -120,11 +126,13 @@ invoice-trip-organizer/
 ├── LICENSE                 # MIT 许可证
 ├── README.md              # 本文件
 ├── CHANGELOG.md           # 变更日志
-├── SKILL.md               # Skill 触发词文档
+├── SKILL.md               # WorkBuddy Skill 触发词文档
+├── codex/SKILL.md         # Codex 专用 Skill 安装文件
 ├── requirements.txt        # Python 依赖
 ├── install.sh             # 安装脚本
 ├── 交付说明.md             # 版本交付说明
 ├── 项目管理体系说明.md      # 项目管理体系
+├── docs/                  # SOP 文档
 ├── scripts/               # 核心脚本
 │   └── invoice-trip-organizer/
 │       ├── VERSION            # 当前版本号
@@ -141,7 +149,8 @@ invoice-trip-organizer/
 │       ├── upload_files.py
 │       ├── import_trips.py
 │       ├── email_manager.py
-│       └── audit_03_done.py
+│       ├── audit_03_done.py
+│       └── release_check.py
 ├── Templates/             # 模板文件
 └── 项目管理/              # 项目管理文档
     ├── 版本发布记录/
@@ -164,8 +173,9 @@ invoice-trip-organizer/
 
 1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件
 2. 更新 `scripts/invoice-trip-organizer/CHANGELOG.md`
-3. 同步到 GitHub 并创建对应 tag（如 `v1.0.4`）
-4. 使用人运行 `deploy.py --upgrade` 自动升级
+3. 运行 `python3 scripts/invoice-trip-organizer/release_check.py`
+4. 同步到 GitHub 并创建对应 tag（如 `v1.0.8`）
+5. 使用人运行 `deploy.py --upgrade` 自动升级
 
 ---
 

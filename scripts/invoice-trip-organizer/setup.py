@@ -3,6 +3,7 @@
 个人行程与报销 - 初始化设置 & 重置
 用法:
   python3 setup.py init    # 初始化设置：弹出文件夹选择窗口，创建目录架构
+  python3 setup.py init --base-dir /tmp/demo-vault  # 无界面初始化，适合自动化测试
   python3 setup.py reset   # 重置：确认后删除目录架构，再跳到初始化设置
 """
 import os
@@ -11,13 +12,15 @@ import shutil
 import subprocess
 import platform
 import importlib.util
+import argparse
 from datetime import datetime
 
 # ===== 常量 =====
 SKILL_NAME = "个人行程与报销"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_SCRIPTS_DIR = SCRIPT_DIR
-SKILL_DOCS_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "docs")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+SKILL_DOCS_DIR = os.path.join(PROJECT_ROOT, "docs")
 
 # 需要复制到工作目录的脚本文件
 SCRIPT_FILES = [
@@ -27,7 +30,9 @@ SCRIPT_FILES = [
     "download_invoices.py",
     "email_manager.py",
     "upload_files.py",
+    "import_trips.py",
     "audit_03_done.py",
+    "release_check.py",
     "init.py",
     "setup.py",
     "config_template.py",
@@ -203,10 +208,10 @@ def get_current_base_dir(config):
     return None
 
 
-def generate_config_py(vault_path, skill_version="1.0.6"):
+def generate_config_py(vault_path, skill_version="1.0.8"):
     """生成 config.py 内容"""
     invoice_base = os.path.join(vault_path, SKILL_NAME, "01 发票整理")
-    trip_base = os.path.join(vault_path, SKILL_NAME, "02 行程与个人报销单")
+    trip_base = os.path.join(vault_path, SKILL_NAME, "02 行程与员工报销单")
 
     content = f'''"""
 配置文件 - 个人行程与报销
@@ -230,7 +235,7 @@ OBSIDIAN_VAULT = "{vault_path}"
 INVOICE_BASE_REL = "个人行程与报销/01 发票整理"
 
 # 行程与报销单相对路径
-TRIP_BASE_REL = "个人行程与报销/02 行程与个人报销单"
+TRIP_BASE_REL = "个人行程与报销/02 行程与员工报销单"
 
 # ===== 脚本实际使用的路径变量 =====
 
@@ -402,18 +407,23 @@ def get_trip_overview_md_content():
 # 初始化设置
 # ============================================================
 
-def do_init():
+def do_init(vault_path=None):
     """初始化设置：弹出文件夹选择窗口，创建目录架构"""
     print("=" * 50)
     print("初始化设置 - 个人行程与报销")
     print("=" * 50)
     print()
-    print("请在弹出的窗口中选择「个人行程与报销」的父目录")
-    print("（将在所选目录下创建「个人行程与报销/」子目录）")
-    print()
 
     # 1. 选择文件夹
-    vault_path = pick_folder("选择「个人行程与报销」的父目录")
+    if vault_path:
+        print(f"使用指定父目录: {vault_path}")
+        print("（将在该目录下创建「个人行程与报销/」子目录）")
+    else:
+        print("请在弹出的窗口中选择「个人行程与报销」的父目录")
+        print("（将在所选目录下创建「个人行程与报销/」子目录）")
+        vault_path = pick_folder("选择「个人行程与报销」的父目录")
+    print()
+
     if not vault_path:
         print("未选择文件夹，初始化取消")
         return False
@@ -439,14 +449,14 @@ def do_init():
         os.path.join(base_dir, "01 发票整理", "01 待分类"),
         os.path.join(base_dir, "01 发票整理", "02 待核实"),
         os.path.join(base_dir, "01 发票整理", "03 已完成"),
-        os.path.join(base_dir, "02 行程与个人报销单"),
-        os.path.join(base_dir, "02 行程与个人报销单", f"{current_year} 年"),
+        os.path.join(base_dir, "02 行程与员工报销单"),
+        os.path.join(base_dir, "02 行程与员工报销单", f"{current_year} 年"),
         os.path.join(base_dir, "scripts"),
     ]
     # 12 个月子目录
     for m in range(1, 13):
         dirs_to_create.append(
-            os.path.join(base_dir, "02 行程与个人报销单", f"{current_year} 年", f"{m} 月")
+            os.path.join(base_dir, "02 行程与员工报销单", f"{current_year} 年", f"{m} 月")
         )
 
     created = 0
@@ -471,7 +481,7 @@ def do_init():
          get_ledger_md_content()),
         (os.path.join(base_dir, "总台账.md"),
          get_total_ledger_md_content()),
-        (os.path.join(base_dir, "02 行程与个人报销单", f"{current_year} 年", "行程总览.md"),
+        (os.path.join(base_dir, "02 行程与员工报销单", f"{current_year} 年", "行程总览.md"),
          get_trip_overview_md_content()),
     ]
     for path, content in md_files:
@@ -515,11 +525,11 @@ def do_init():
 
     # 7. 生成 config.py（已存在则保留，不覆盖用户配置）
     print("⚙️  配置文件 config.py...")
-    skill_version = "1.0.6"
+    skill_version = "1.0.8"
     version_file = os.path.join(src_scripts_dir, "VERSION")
     if os.path.exists(version_file):
         with open(version_file, 'r', encoding='utf-8') as f:
-            skill_version = f.read().strip() or "1.0.6"
+            skill_version = f.read().strip() or "1.0.8"
 
     config_content = generate_config_py(vault_path, skill_version=skill_version)
     config_path = os.path.join(dst_scripts_dir, "config.py")
@@ -552,7 +562,7 @@ def do_init():
     print(f"  │   ├── 01 待分类/     ← 放入新发票")
     print(f"  │   ├── 02 待核实/     ← 脚本无法识别的文件")
     print(f"  │   └── 03 已完成/     ← 已整理归档")
-    print(f"  ├── 02 行程与个人报销单/{current_year} 年/")
+    print(f"  ├── 02 行程与员工报销单/{current_year} 年/")
     print(f"  ├── scripts/           ← 脚本和配置")
     print(f"  ├── SOP-发票文件命名标准.md")
     print(f"  └── 总台账.md")
@@ -708,16 +718,14 @@ def main():
             # 版本检查失败不影响主流程
             pass
 
-    if len(sys.argv) < 2:
-        print("用法:")
-        print("  python3 setup.py init    # 初始化设置")
-        print("  python3 setup.py reset   # 重置（删除目录，可选重新初始化）")
-        print("  python3 setup.py update  # 检查并更新到最新版本")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="个人行程与报销初始化、重置与更新")
+    parser.add_argument("mode", choices=["init", "reset", "update"], help="执行模式")
+    parser.add_argument("--base-dir", help="初始化父目录；提供后不弹窗，适合自动化测试")
+    args = parser.parse_args()
 
-    mode = sys.argv[1].lower().strip()
+    mode = args.mode.lower().strip()
     if mode == 'init':
-        success = do_init()
+        success = do_init(args.base_dir)
         sys.exit(0 if success else 1)
     elif mode == 'reset':
         success = do_reset()

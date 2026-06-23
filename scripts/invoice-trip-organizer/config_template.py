@@ -8,7 +8,11 @@
    - EMAIL_ADDRESS: 你的163邮箱地址
    - EMAIL_AUTH_CODE: 你的163邮箱授权码
 3. python3 init.py
+
+注意: BASE_ROOT / INVOICE_ROOT / TRIP_ROOT 等路径由 OBSIDIAN_VAULT 自动计算，
+      通常只需修改 OBSIDIAN_VAULT 即可。运行 setup.py init 会自动生成 config.py。
 """
+import os
 
 # ========== 必填: 路径配置 ==========
 
@@ -22,7 +26,19 @@ OBSIDIAN_VAULT = "~/Documents/MyVault"
 INVOICE_BASE_REL = "个人行程与报销/01 发票整理"
 
 # 行程与报销单目录相对路径 (相对于 OBSIDIAN_VAULT)
-TRIP_BASE_REL = "个人行程与报销/02 行程与个人报销单"
+TRIP_BASE_REL = "个人行程与报销/02 行程与员工报销单"
+
+# ===== 以下路径由上面三项自动计算，通常无需手动修改 =====
+# 发票整理根目录（脚本用）
+BASE_ROOT = os.path.join(os.path.expanduser(OBSIDIAN_VAULT), INVOICE_BASE_REL)
+INPUT_DIR = os.path.join(BASE_ROOT, "01 待分类")
+DONE_DIR = os.path.join(BASE_ROOT, "03 已完成")
+REVIEW_DIR = os.path.join(BASE_ROOT, "02 待核实")
+LOG_FILE = os.path.join(BASE_ROOT, ".organizer_log.json")
+
+# 行程根目录（trip脚本用）
+INVOICE_ROOT = BASE_ROOT
+TRIP_ROOT = os.path.join(os.path.expanduser(OBSIDIAN_VAULT), TRIP_BASE_REL)
 
 # 报销单 Excel 模板路径 (如使用报销单生成功能，填写模板路径; 否则留空)
 REIMBURSEMENT_TEMPLATE = ""

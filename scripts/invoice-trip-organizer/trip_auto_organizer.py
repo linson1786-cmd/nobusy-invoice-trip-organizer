@@ -38,20 +38,16 @@ try:
                 globals()[_attr] = getattr(config, _attr)
         print(f"✅ 已从 config.py 读取配置 (TRIP_ROOT={globals().get('TRIP_ROOT', 'N/A')})")
 except Exception as e:
-    pass  # 使用下方默认值
+    print(f"⚠️ 读取 config.py 失败: {e}")
 
-# ===== 默认配置 (可被 config.py 覆盖) =====
+# ===== 默认配置：未初始化时保持为空，运行前给出明确提示 =====
 if 'BASE_ROOT' not in dir():
-    BASE_ROOT = os.path.expanduser(
-        "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/NoBusy-Demo/个人行程与报销"
-    )
-    INVOICE_ROOT = os.path.join(BASE_ROOT, "01 发票整理")
-    DONE_DIR = os.path.join(INVOICE_ROOT, "03 已完成")
-    TRIP_ROOT = os.path.join(BASE_ROOT, "02 行程与个人报销单")
+    BASE_ROOT = ""
+    INVOICE_ROOT = ""
+    DONE_DIR = ""
+    TRIP_ROOT = ""
     if 'REIMBURSEMENT_TEMPLATE' not in dir():
-        REIMBURSEMENT_TEMPLATE = os.path.expanduser(
-            "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/NoBusy-Demo/个人行程与报销/个人报销单模板_明细 4（参考）.xlsx"
-        )
+        REIMBURSEMENT_TEMPLATE = ""
     if 'CAT_TO_SUBDIR' not in dir():
         CAT_TO_SUBDIR = {
             "机票": "机票高铁", "机票(保险)": "机票高铁", "高铁": "机票高铁",
@@ -67,6 +63,12 @@ if 'BASE_ROOT' not in dir():
     if 'NON_REIMBURSE' not in dir():
         NON_REIMBURSE = ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单"]
 
+if 'VALID_CATEGORIES' not in dir():
+    VALID_CATEGORIES = [
+        "餐饮", "住宿", "机票", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "礼品", "结账单", "其他",
+        "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"
+    ]
+
 # 标准文件名正则
 STANDARD_NAME_RE = re.compile(
     r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
@@ -78,9 +80,22 @@ STANDARD_NAME_RE = re.compile(
 )
 
 # 报销单模板路径
-TEMPLATE_XLSX = os.path.expanduser(
-    "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/NoBusy-Demo/个人行程与报销/个人报销单模板_明细 4（参考）.xlsx"
-)
+TEMPLATE_XLSX = globals().get("REIMBURSEMENT_TEMPLATE", "")
+
+
+def ensure_configured():
+    """确认已完成初始化并存在有效路径配置。"""
+    required = {
+        "INVOICE_ROOT": INVOICE_ROOT,
+        "DONE_DIR": DONE_DIR,
+        "TRIP_ROOT": TRIP_ROOT,
+    }
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        print("❌ 未完成初始化：缺少路径配置 " + ", ".join(missing))
+        print("请先运行：python3 setup.py init")
+        return False
+    return True
 
 
 def get_next_trip_id(year_dir):
@@ -189,13 +204,12 @@ graph LR
 {cities}"""
 
     # 发票文件链接
-    year_str = f"{int(folder_name[:4]) if folder_name[:4].isdigit() else '2026'} 年" if '年' not in folder_name else "2026 年"
-    # 从folder_name解析月
-    month_in_name = start_date[5:7] + " 月"
+    # 与实际目录名保持一致：1 月、2 月，不使用 01 月。
+    month_in_name = f"{int(start_date[5:7])} 月"
     invoice_links = f"""
 ## 发票文件清单
 
-> 详见 [[个人行程与报销/02 行程与个人报销单/2026 年/{month_in_name}/{folder_name}/02-发票文件/发票文件清单|发票文件清单]]
+> 详见 [[个人行程与报销/02 行程与员工报销单/2026 年/{month_in_name}/{folder_name}/02-发票文件/发票文件清单|发票文件清单]]
 
 ## 发票文件
 
@@ -329,8 +343,8 @@ def gen_invoice_list_md(matched, trip_dir, folder_name, month_str):
             md += f"| {i['date']} | {i['category']} | ¥{float(i['amount']):,.2f} | {remark} | {i['filename']} |\n"
         md += "\n"
 
-    md += f"\n> 📁 附件目录: [[个人行程与报销/02 行程与个人报销单/2026 年/{month_str}/{folder_name}/02-发票文件|02-发票文件]]\n"
-    md += f"> 📝 行程详情: [[个人行程与报销/02 行程与个人报销单/2026 年/{month_str}/{folder_name}/01-行程详情|01-行程详情]]\n"
+    md += f"\n> 📁 附件目录: [[个人行程与报销/02 行程与员工报销单/2026 年/{month_str}/{folder_name}/02-发票文件|02-发票文件]]\n"
+    md += f"> 📝 行程详情: [[个人行程与报销/02 行程与员工报销单/2026 年/{month_str}/{folder_name}/01-行程详情|01-行程详情]]\n"
 
     md_path = os.path.join(invoice_dir, "发票文件清单.md")
     with open(md_path, 'w', encoding='utf-8') as f:
@@ -355,7 +369,7 @@ def update_trip_overview(trip_id, start_date, end_date, route_list, folder_name,
 
     route_str = '-'.join(route_list)
     # 添加新行
-    new_row = f"| 出差{trip_id} | {start_date}～{end_date} | {route_str} | {count_reimburse}张 | ¥{total_reimburse:,.2f} | 发票整理中 | [[{month_str}/{folder_name}/01-行程详情|出差{trip_id}]] | [[个人行程与报销/02 行程与个人报销单/2026 年/{month_str}/{folder_name}/02-发票文件/发票文件清单|发票文件清单]] |\n"
+    new_row = f"| 出差{trip_id} | {start_date}～{end_date} | {route_str} | {count_reimburse}张 | ¥{total_reimburse:,.2f} | 发票整理中 | [[{month_str}/{folder_name}/01-行程详情|出差{trip_id}]] | [[个人行程与报销/02 行程与员工报销单/2026 年/{month_str}/{folder_name}/02-发票文件/发票文件清单|发票文件清单]] |\n"
 
     # 查找表格并插入
     lines = md.split('\n')
@@ -433,6 +447,9 @@ def main():
                 vm.check_and_update(config_path, auto=True, silent=True)
     except Exception:
         pass
+
+    if not ensure_configured():
+        return
 
     args = parse_args()
     start_date = args.start_date

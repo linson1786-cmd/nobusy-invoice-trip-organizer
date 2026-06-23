@@ -60,6 +60,7 @@ scripts/.organizer_log.json
 # 测试生成的临时文件
 *.tmp
 *.bak
+**/.backup/
 
 # === 版本归档（已打包，不需要重复提交） ===
 版本归档/*.zip

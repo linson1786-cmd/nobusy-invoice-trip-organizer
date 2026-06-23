@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.8 - 2026-06-24
+
+- Added `release_check.py` as a repeatable release gate for version, tracked files, required resources, Python compilation, local installs, and Codex validation.
+- Added non-GUI initialization with `setup.py init --base-dir` for automated validation and demo-safe testing.
+- Added missing `docs/SOP-发票文件命名标准.md` and fixed SOP copy path during initialization.
+- Removed stale root-level `scripts/*.py` duplicates; `scripts/invoice-trip-organizer/` is now the single source directory.
+- Fixed initialization copy list to include `import_trips.py` and `release_check.py`.
+- Removed local `NoBusy-Demo` fallback paths from standard scripts; missing config now fails with clear initialization guidance.
+- Fixed generated trip links to use the actual `1 月` directory format instead of `01 月`.
+- Fixed invoice status counts to exclude generated `日志.md` and `台账.md` files.
+
 ## v1.0.7 - 2026-06-24
 
 - Fixed version alignment across project source, WorkBuddy installation, and GitHub repository metadata.
