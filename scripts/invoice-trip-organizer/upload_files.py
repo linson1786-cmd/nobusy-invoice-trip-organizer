@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-上传文件到 01 待分类 目录
+导入文件到 01 待分类 目录
 弹出文件选择窗口，选择文件后自动复制到 01 待分类/
 """
 import os
@@ -36,7 +36,7 @@ def get_target_dir(config):
 def pick_files_macos():
     """macOS: 使用 osascript 弹出原生文件选择窗口（支持多选）"""
     script = '''
-    set theFiles to choose file of type {"public.item"} with multiple selections allowed with prompt "选择要上传的发票/附件文件"
+    set theFiles to choose file of type {"public.item"} with multiple selections allowed with prompt "选择要导入的发票/附件文件"
     set output to ""
     repeat with f in theFiles
         set output to output & (POSIX path of f) & linefeed
@@ -48,20 +48,38 @@ def pick_files_macos():
             ['osascript', '-e', script],
             capture_output=True, text=True, timeout=300
         )
-        if result.returncode != 0:
-            if 'cancel' in (result.stderr or '').lower():
-                print('用户取消了选择')
-                return []
-            # osascript 失败，回退到 tkinter
-            return pick_files_tkinter()
 
+        # 优先检查 stdout 是否有文件路径
+        # （macOS 双击文件时可能返回非零退出码但 stdout 仍有结果）
         files = [f.strip() for f in result.stdout.strip().split('\n') if f.strip()]
-        return files
+        if files:
+            return files
+
+        # stdout 没有文件路径，判断是否是用户取消
+        if result.returncode != 0:
+            err_lower = (result.stderr or '').lower()
+            if 'cancel' in err_lower or 'user canceled' in err_lower or '-128' in err_lower:
+                print('用户取消了选择，停止执行', flush=True)
+                sys.exit(0)
+            # osascript 返回错误且没有文件 —— 直接退出，不再弹第二次窗口
+            print(f'文件选择异常: {result.stderr.strip()}', flush=True)
+            sys.exit(0)
+
+        # returncode 为 0 但没有文件
+        print('未选择任何文件，停止执行', flush=True)
+        sys.exit(0)
+
     except subprocess.TimeoutExpired:
-        print('选择超时')
-        return []
+        print('选择超时，停止执行', flush=True)
+        sys.exit(0)
     except FileNotFoundError:
+        # osascript 不存在，回退到 tkinter
         return pick_files_tkinter()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f'文件选择异常: {e}', flush=True)
+        sys.exit(0)
 
 
 def pick_files_tkinter():
@@ -70,22 +88,26 @@ def pick_files_tkinter():
         import tkinter as tk
         from tkinter import filedialog
     except ImportError:
-        print('错误: 无法加载文件选择器。')
+        print('错误: 无法加载文件选择器。', flush=True)
         print('  macOS: brew install python-tk')
         print('  Ubuntu: sudo apt install python3-tk')
-        return []
+        sys.exit(0)
 
     root = tk.Tk()
     root.withdraw()
     root.attributes('-topmost', True)
 
     files = filedialog.askopenfilenames(
-        title='选择要上传的发票/附件文件',
+        title='选择要导入的发票/附件文件',
         parent=root
     )
 
     root.destroy()
-    return list(files) if files else []
+
+    if not files:
+        print('用户取消了选择，停止执行', flush=True)
+        sys.exit(0)
+    return list(files)
 
 
 def pick_files():
@@ -148,28 +170,28 @@ def main():
     config = load_config()
     target_dir = get_target_dir(config)
 
-    print('=' * 50)
-    print('上传文件到 01 待分类')
-    print(f'目标目录: {target_dir}')
-    print('=' * 50)
+    print('=' * 50, flush=True)
+    print('导入文件到 01 待分类', flush=True)
+    print(f'目标目录: {target_dir}', flush=True)
+    print('=' * 50, flush=True)
     print()
-    print('正在打开文件选择窗口...')
+    print('正在打开文件选择窗口...', flush=True)
 
     files = pick_files()
 
     if not files:
-        print('未选择任何文件')
-        return
+        print('未选择任何文件，停止执行', flush=True)
+        sys.exit(0)
 
-    print(f'已选择 {len(files)} 个文件:')
+    print(f'已选择 {len(files)} 个文件:', flush=True)
     for f in files:
         print(f'  - {os.path.basename(f)}')
     print()
 
     success, failed = copy_files(files, target_dir)
 
-    print(f'上传完成: 成功 {len(success)} 个' +
-          (f', 失败 {len(failed)} 个' if failed else ''))
+    print(f'导入完成: 成功 {len(success)} 个' +
+          (f', 失败 {len(failed)} 个' if failed else ''), flush=True)
 
     if success:
         print(f'\n文件已复制到: {target_dir}')
