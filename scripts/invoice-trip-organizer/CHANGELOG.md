@@ -38,3 +38,19 @@
 - 所有脚本入口自动检查版本并更新
 
 
+## 1.0.2 - 2026-06-23
+
+### 新增
+
+- **在线升级**：deploy.py 新增 `--upgrade` 命令，一键从 GitHub 拉取最新版本
+- **远程检查**：deploy.py 新增 `--check-update` 命令，检查 GitHub 是否有新版本
+- **三重降级**：git ls-remote → GitHub API → raw.githubusercontent.com 读取 VERSION 文件
+- **配置保护**：升级时绝不覆盖用户 config.py，仅更新脚本和模板文件
+
+### 改进
+
+- SKILL.md description 嵌入版本号，安装列表直接显示当前版本
+- SKILL.md 文档增加在线升级使用说明
+- 部署工具新增 `--status` / `--backup` / `--force` 命令
+
+
