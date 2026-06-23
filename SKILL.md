@@ -62,7 +62,7 @@ trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发
 本项目独立管理，路径：
 `/Users/linson/Documents/Personage/AI Tools Learning/WorkBuddy Skills/`
 
-当前版本：**V1.0**（初始发布）
+当前版本：**V1.0.4**
 
 ## 首次使用
 
