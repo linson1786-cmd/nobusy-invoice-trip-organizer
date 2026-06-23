@@ -12,7 +12,7 @@ Skill 版本管理器 —— 支持自动更新，不影响用户数据
   from version_manager import check_and_update
   check_and_update(config_path)  # 在脚本入口调用即可
 
-版本号格式：Semantic Versioning（如 1.0.5）
+版本号格式：Semantic Versioning（如 1.0.6）
 """
 
 import os
