@@ -513,28 +513,33 @@ def do_init():
             print(f"  ⚠️  源文件不存在: {src_name}")
     print()
 
-    # 7. 生成 config.py
-    print("⚙️  生成 config.py...")
-    # 6.5. 生成 config.py（读取 Skill 最新版本号）
-    # 读取 Skill VERSION 文件获取最新版本号
+    # 7. 生成 config.py（已存在则保留，不覆盖用户配置）
+    print("⚙️  配置文件 config.py...")
     skill_version = "V1.0"
     version_file = os.path.join(src_scripts_dir, "VERSION")
     if os.path.exists(version_file):
         with open(version_file, 'r', encoding='utf-8') as f:
             skill_version = f.read().strip() or "1.0.0"
-    
+
     config_content = generate_config_py(vault_path, skill_version=skill_version)
     config_path = os.path.join(dst_scripts_dir, "config.py")
-    with open(config_path, 'w', encoding='utf-8') as f:
-        f.write(config_content)
-    print(f"  ✅ {os.path.relpath(config_path, vault_path)}")
 
-    # 同时写入 skill 目录（供 reset 查找）
+    if os.path.exists(config_path):
+        print(f"  ⏩ 已存在，保留用户配置: {os.path.relpath(config_path, vault_path)}")
+    else:
+        with open(config_path, 'w', encoding='utf-8') as f:
+            f.write(config_content)
+        print(f"  ✅ 创建: {os.path.relpath(config_path, vault_path)}")
+
+    # skill 目录的 config.py 同理：已存在则保留
     skill_config_path = os.path.join(SKILL_SCRIPTS_DIR, "config.py")
     if os.path.isdir(SKILL_SCRIPTS_DIR):
-        with open(skill_config_path, 'w', encoding='utf-8') as f:
-            f.write(config_content)
-        print(f"  ✅ 同步到 skill 目录: {skill_config_path}")
+        if os.path.exists(skill_config_path):
+            print(f"  ⏩ skill 目录 config.py 已存在，保留")
+        else:
+            with open(skill_config_path, 'w', encoding='utf-8') as f:
+                f.write(config_content)
+            print(f"  ✅ 同步到 skill 目录: {skill_config_path}")
     print()
 
     # 8. 完成
