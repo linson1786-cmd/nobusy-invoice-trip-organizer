@@ -1,7 +1,7 @@
 ---
 name: invoice-trip-organizer
-description: 个人行程与报销 V1.0.6 | 配置化版本，支持分享与在线升级
-version: 1.0.6
+description: 个人行程与报销 V1.0.7 | 配置化版本，支持分享与在线升级
+version: 1.0.7
 trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发票整理", "行程整理", "导入", "导入文件", "新增行程", "初始化", "初始化设置", "重置", "下载发票", "收发票", "升级", "检查更新"]
 ---
 
@@ -63,7 +63,7 @@ trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发
 本项目独立管理，路径：
 `/Users/linson/Documents/Personage/AI Tools Learning/WorkBuddy Skills/`
 
-当前版本：**V1.0.6**
+当前版本：**V1.0.7**
 
 ## 首次使用
 
@@ -108,10 +108,10 @@ cd scripts && python3 setup.py init
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
-| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.6"` |
+| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.7"` |
 | `OBSIDIAN_VAULT` | Obsidian 笔记库根目录 | `~/Documents/MyVault` |
 | `INVOICE_BASE_REL` | 发票整理相对路径 | `个人行程与报销/01 发票整理` |
-| `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程与个人报销单` |
+| `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程与员工报销单` |
 | `REIMBURSEMENT_TEMPLATE` | 报销单 Excel 模板路径 | `...xlsx` |
 
 > 📮 邮箱配置不再写入 config.py。运行下载脚本时会弹出界面选择/注册邮箱，账户信息保存在 `~/.invoice-trip/email_accounts.json`，支持多个邮箱。
@@ -202,7 +202,7 @@ cp *.py ../../
 
 ### 发布新版本（开发者）
 
-1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.5` → `1.0.6`）
+1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.6` → `1.0.7`）
 2. 在 `scripts/invoice-trip-organizer/CHANGELOG.md` 中记录变更
 3. 如有新增配置项，更新 `config_template.py`
 4. 用户下次运行任意脚本时，自动检测并更新
