@@ -5,6 +5,7 @@ Skill 发布前检查。
 
 默认执行本地离线检查，不访问邮箱、OA、真实发票或 GitHub。
 用法：
+  python3 release_check.py --quick
   python3 release_check.py
   python3 release_check.py --allow-dirty
 """
@@ -390,14 +391,27 @@ def check_git_clean(allow_dirty: bool) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description="invoice-trip-organizer 发布检查")
     parser.add_argument("--allow-dirty", action="store_true", help="允许工作区存在未提交变更")
+    parser.add_argument("--quick", action="store_true", help="快速检查：跳过安装同步、Codex 校验和端到端迁移测试")
     args = parser.parse_args()
 
-    checks = [
+    quick_checks = [
         check_version(),
         check_python_compile(),
         check_tracked_files(),
         check_required_resources(),
         check_forbidden_text(),
+        check_git_clean(args.allow_dirty),
+    ]
+
+    if args.quick:
+        if all(quick_checks):
+            print("\n✅ 快速检查通过")
+            return 0
+        print("\n❌ 快速检查未通过")
+        return 1
+
+    checks = [
+        *quick_checks[:-1],
         check_install_versions(),
         check_workbuddy_script_sync(),
         check_codex_validate(),
@@ -405,7 +419,7 @@ def main() -> int:
         check_lodging_done_migration(),
         check_trigger_stdin_ignored(),
         check_stdin_trip_import(),
-        check_git_clean(args.allow_dirty),
+        quick_checks[-1],
     ]
     if all(checks):
         print("\n✅ 发布检查通过")
