@@ -203,7 +203,7 @@ def get_current_base_dir(config):
     return None
 
 
-def generate_config_py(vault_path, skill_version="1.0.5"):
+def generate_config_py(vault_path, skill_version="1.0.6"):
     """生成 config.py 内容"""
     invoice_base = os.path.join(vault_path, SKILL_NAME, "01 发票整理")
     trip_base = os.path.join(vault_path, SKILL_NAME, "02 行程与个人报销单")
@@ -515,11 +515,11 @@ def do_init():
 
     # 7. 生成 config.py（已存在则保留，不覆盖用户配置）
     print("⚙️  配置文件 config.py...")
-    skill_version = "1.0.5"
+    skill_version = "1.0.6"
     version_file = os.path.join(src_scripts_dir, "VERSION")
     if os.path.exists(version_file):
         with open(version_file, 'r', encoding='utf-8') as f:
-            skill_version = f.read().strip() or "1.0.5"
+            skill_version = f.read().strip() or "1.0.6"
 
     config_content = generate_config_py(vault_path, skill_version=skill_version)
     config_path = os.path.join(dst_scripts_dir, "config.py")
