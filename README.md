@@ -1,6 +1,6 @@
 # 个人行程与报销 Skill
 
-> **版本**: V1.0.1  
+> **版本**: V1.0.4  
 > **创建日期**: 2026-06-23  
 > **项目归属**: NoBusy 别虾忙｜AI 管理实战  
 > **负责人**: Linson  
@@ -10,17 +10,19 @@
 
 ## 项目简介
 
-本项目为 WorkBuddy 的 Skill 插件，用于自动化管理个人行程与报销发票。支持发票自动识别、分类、归档，行程自动关联，邮件发票下载，以及完整的版本管理。
+本项目为 WorkBuddy 的 Skill 插件，用于自动化管理个人行程与报销发票。支持发票自动识别、分类、归档，行程自动关联，邮件发票下载，批量导入行程，文件导入，以及完整的版本管理和在线升级。
 
 ## 功能列表
 
 | 功能 | 脚本 | 说明 |
 |------|------|------|
-| 初始化设置 | `setup.py` | 创建目录结构、生成配置 |
-| 发票自动整理 | `invoice_auto_organizer.py` | PDF 识别、分类、归档、台账 |
-| 行程自动整理 | `trip_auto_organizer.py` | 创建行程、匹配发票、生成清单 |
-| 邮件下载发票 | `download_invoices.py` | IMAP 下载邮件附件 |
-| 文件上传 | `upload_files.py` | 弹窗选择文件，自动复制到待分类 |
+| 初始化设置 | `setup.py` | 弹窗选择目录，创建完整目录结构，生成 config.py（已有则保留） |
+| 发票自动整理 | `invoice_auto_organizer.py` | PDF/OFD/XML/图片识别、分类、归档、台账 |
+| 行程自动整理 | `trip_auto_organizer.py` | 创建行程、匹配发票、生成清单和总览 |
+| 邮件下载发票 | `download_invoices.py` | IMAP 下载邮件附件，支持多邮箱 |
+| 导入文件 | `upload_files.py` | 弹窗选择文件，自动复制到 01 待分类 |
+| 导入行程 | `import_trips.py` | 粘贴 Tab 分隔数据，按日期去重批量创建行程 |
+| 在线升级 | `deploy.py` | 从 GitHub 一键升级，自动备份旧版 |
 | 版本管理 | `version_manager.py` | 自动检测、备份、更新 |
 
 ---
@@ -38,25 +40,22 @@ pip install -r requirements.txt
 
 ### 2. 初始化设置
 
+在 WorkBuddy 中对我说「初始化设置」，或手动运行：
+
 ```bash
 cd scripts/invoice-trip-organizer
 python3 setup.py init
 ```
 
-按提示选择存放目录，脚本会自动创建目录结构。
+弹窗选择父目录后，脚本自动创建目录结构、复制 SOP 文档、生成 config.py。
 
 ### 3. 配置邮箱（可选）
 
-复制配置模板：
-
-```bash
-cp config_template.py config.py
-# 编辑 config.py，填写邮箱和授权码
-```
+运行 `download_invoices.py` 时会弹出邮箱选择/注册界面，账户信息保存在 `~/.invoice-trip/email_accounts.json`，支持多个邮箱。
 
 ### 4. 开始使用
 
-**发票整理**：将发票放入 `01 待分类/`，然后运行：
+**发票整理**：将发票放入 `01 待分类/`，然后对我说「发票整理」或运行：
 
 ```bash
 python3 invoice_auto_organizer.py
@@ -68,89 +67,96 @@ python3 invoice_auto_organizer.py
 python3 trip_auto_organizer.py
 ```
 
+**导入行程**：批量粘贴行程数据：
+
+```bash
+python3 import_trips.py
+```
+
+---
+
+## 在线升级
+
+```bash
+# 检查是否有新版本
+python3 deploy.py --check-update
+
+# 一键升级到最新版本
+python3 deploy.py --upgrade
+
+# 查看当前版本状态
+python3 deploy.py --status
+```
+
+升级保障：
+- 数据安全：仅更新脚本文件，绝不覆盖用户 config.py、发票、行程、台账
+- 自动备份：升级前自动备份旧版本到 `.backup/`
+- 三重降级：git clone → HTTP ZIP → GitHub API
+
 ---
 
 ## 项目结构
 
 ```
 invoice-trip-organizer/
-├── .gitignore              # Git 忽略规则
+├── .gitignore
 ├── LICENSE                 # MIT 许可证
-├── requirements.txt        # Python 依赖
 ├── README.md              # 本文件
+├── CHANGELOG.md           # 变更日志
 ├── SKILL.md               # Skill 触发词文档
-├── V1.0-交付说明.md       # 版本交付说明
-├── 项目管理体系说明.md     # 项目管理体系
-├── scripts/               # 核心脚本（开发工作目录）
+├── requirements.txt        # Python 依赖
+├── install.sh             # 安装脚本
+├── 交付说明.md             # 版本交付说明
+├── 项目管理体系说明.md      # 项目管理体系
+├── scripts/               # 核心脚本
 │   └── invoice-trip-organizer/
-│   └── invoice-trip-organizer/
-│       ├── VERSION            # 当前版本 V1.0
-│       ├── CHANGELOG.md       # 变更日志
-│       ├── setup.py           # 初始化设置
+│       ├── VERSION            # 当前版本号
+│       ├── CHANGELOG.md       # 详细变更日志
+│       ├── setup.py           # 初始化设置 & 重置 & 更新
 │       ├── init.py            # 入口脚本
 │       ├── config_template.py # 配置模板
+│       ├── config.py          # 用户配置（gitignore）
 │       ├── version_manager.py # 版本管理器
+│       ├── deploy.py          # 部署 & 在线升级
 │       ├── invoice_auto_organizer.py
 │       ├── trip_auto_organizer.py
 │       ├── download_invoices.py
 │       ├── upload_files.py
+│       ├── import_trips.py
 │       ├── email_manager.py
 │       └── audit_03_done.py
-├── 源文件/                # 版本源码归档
-├── 交付包/                # 对外发布包
-├── 版本归档/              # 历史版本压缩包
-├── 项目管理/              # 项目管理文档
-│   ├── 版本发布记录/
-│   ├── 需求与计划/
-│   ├── 测试记录/
-│   └── 使用反馈/
-└── Templates/             # 模板文件
+├── Templates/             # 模板文件
+└── 项目管理/              # 项目管理文档
+    ├── 版本发布记录/
+    ├── 需求与计划/
+    ├── 测试记录/
+    └── 使用反馈/
 ```
 
 ---
 
 ## 版本管理
 
-本项目采用 V1.0 / V1.1 版本号格式。每次运行任意脚本时，版本管理器会自动检测更新并备份旧版本。
+本项目采用 **Semantic Versioning**（语义化版本号），格式为 `MAJOR.MINOR.PATCH`。
 
-### 发布新版本
+### 自动更新机制
 
-1. 在 `scripts/invoice-trip-organizer/` 中修改代码
-2. 更新 `scripts/invoice-trip-organizer/VERSION` 文件
-3. 更新 `scripts/invoice-trip-organizer/CHANGELOG.md`
-4. 同步到 `源文件/V{version}/` 和 `交付包/V{version}/`
-5. 创建归档到 `版本归档/`
+每次运行脚本时自动检测 Skill 版本，发现新版本时自动更新脚本文件（保留用户数据和配置）。
 
----
+### 发布新版本（开发者）
 
-## Git 提交规范
-
-```bash
-# 初始化仓库
-git init
-
-# 添加所有文件（config.py 会被 .gitignore 自动忽略）
-git add .
-
-# 提交
-git commit -m "V1.0: 初始发布"
-
-# 创建标签
-git tag v1.0
-
-# 推送到 GitHub
-git remote add origin https://github.com/yourusername/invoice-trip-organizer.git
-git push -u origin main
-git push origin v1.0
-```
+1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件
+2. 更新 `scripts/invoice-trip-organizer/CHANGELOG.md`
+3. 同步到 GitHub 并创建对应 tag（如 `v1.0.4`）
+4. 使用人运行 `deploy.py --upgrade` 自动升级
 
 ---
 
 ## 注意事项
 
-- `config.py` 包含用户敏感信息（邮箱、路径），已被 `.gitignore` 忽略，不会提交到 Git
-- 首次使用请复制 `config_template.py` 为 `config.py` 并填写自己的配置
-- 用户数据（发票、台账、行程）独立于代码，更新不受影响
+- `config.py` 包含用户敏感信息（邮箱、路径），已被 `.gitignore` 忽略
+- 首次使用请运行 `setup.py init` 自动生成配置
+- 用户数据（发票、台账、行程）独立于代码，升级不受影响
 
 ---
 
