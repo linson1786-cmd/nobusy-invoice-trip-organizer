@@ -1,7 +1,7 @@
 ---
 name: invoice-trip-organizer
-description: 个人行程与报销 V1.0.10 | 配置化版本，支持分享与在线升级
-version: 1.0.10
+description: 个人行程与报销 V1.0.11 | 配置化版本，支持分享与在线升级
+version: 1.0.11
 trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发票整理", "行程整理", "导入", "导入文件", "新增行程", "初始化", "初始化设置", "重置", "下载发票", "收发票", "升级", "检查更新"]
 ---
 
@@ -63,7 +63,7 @@ trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发
 本项目独立管理，路径：
 `/Users/linson/Documents/Personage/AI Tools Learning/WorkBuddy Skills/`
 
-当前版本：**V1.0.10**
+当前版本：**V1.0.11**
 
 ## 首次使用
 
@@ -113,7 +113,7 @@ TRIPDATA
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
-| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.10"` |
+| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.11"` |
 | `OBSIDIAN_VAULT` | Obsidian 笔记库根目录 | `~/Documents/MyVault` |
 | `INVOICE_BASE_REL` | 发票整理相对路径 | `个人行程与报销/01 发票整理` |
 | `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程与员工报销单` |
@@ -147,12 +147,13 @@ TRIPDATA
 ## 命名规范 (SOP)
 
 ```
-YYYY-MM-DD_类别_金额[_出发-到达][_发票号后4位]_MMDD_WB/YB_NNN.ext
+YYYY-MM-DD_类别_金额[_位置][_发票号后4位]_MMDD_WB/YB_NNN.ext
 ```
 
 示例：
 - `2026-01-05_餐饮_174.00_0105_WB_031.pdf`
 - `2026-01-10_机票_1280.00_广州-上海_0110_WB_042.pdf`
+- `2026-01-12_住宿_264.00_中山_0112_WB_043.pdf`
 - `2026-03-24_住宿(结账单)_278.00_0324_WB_075.pdf`
 
 详细规范见 `docs/SOP-发票文件命名标准.md`。
@@ -207,7 +208,7 @@ cp *.py ../../
 
 ### 发布新版本（开发者）
 
-1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.9` → `1.0.10`）
+1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.10` → `1.0.11`）
 2. 在 `scripts/invoice-trip-organizer/CHANGELOG.md` 中记录变更
 3. 如有新增配置项，更新 `config_template.py`
 4. 用户下次运行任意脚本时，自动检测并更新

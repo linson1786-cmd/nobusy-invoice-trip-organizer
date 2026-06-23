@@ -295,6 +295,67 @@ def check_trigger_stdin_ignored() -> bool:
     return False
 
 
+def check_lodging_city_naming() -> bool:
+    """确认住宿发票可提取酒店城市，并且标准命名支持单城市字段。"""
+    code = (
+        "import importlib.util;"
+        f"spec=importlib.util.spec_from_file_location('iao', {str(SCRIPT_DIR / 'invoice_auto_organizer.py')!r});"
+        "m=importlib.util.module_from_spec(spec);"
+        "spec.loader.exec_module(m);"
+        "text='销售方名称：中山市东区某某酒店有限公司\\n商品名称：住宿服务\\n价税合计 ¥264.00';"
+        "ok_city=(m.extract_route(text, '住宿')=='中山');"
+        "ok_name=bool(m.STANDARD_NAME_RE.match('2026-01-05_住宿_264.00_中山_0624_WB_001.pdf'));"
+        "raise SystemExit(0 if ok_city and ok_name else 1)"
+    )
+    result = subprocess.run(["python3", "-c", code], text=True, capture_output=True)
+    if result.returncode == 0:
+        ok("住宿城市提取与单城市命名验证通过")
+        return True
+    fail("住宿城市提取或单城市命名验证失败")
+    print(result.stdout.strip())
+    print(result.stderr.strip())
+    return False
+
+
+def check_lodging_done_migration() -> bool:
+    """确认 03 已完成和行程附件旧住宿文件可一次性迁移为带城市的新命名。"""
+    demo_root = Path("/private/tmp/invoice-trip-lodging-migration-check")
+    if demo_root.exists():
+        shutil.rmtree(demo_root)
+    done_dir = demo_root / "01 发票整理" / "03 已完成" / "2026-01"
+    done_dir.mkdir(parents=True, exist_ok=True)
+    old_file = done_dir / "2026-01-05_住宿_264.00_0624_WB_001.pdf"
+    old_file.write_text("demo", encoding="utf-8")
+    trip_lodging_dir = demo_root / "02 行程与员工报销单" / "2026 年" / "1 月" / "出差1-2026-01-04～2026-01-06_广州-中山-广州" / "02-发票文件" / "住宿"
+    trip_lodging_dir.mkdir(parents=True, exist_ok=True)
+    trip_old_file = trip_lodging_dir / "2026-01-05_住宿_264.00_0624_WB_001.pdf"
+    trip_old_file.write_text("demo", encoding="utf-8")
+
+    code = (
+        "import importlib.util;"
+        f"spec=importlib.util.spec_from_file_location('iao', {str(SCRIPT_DIR / 'invoice_auto_organizer.py')!r});"
+        "m=importlib.util.module_from_spec(spec);"
+        "spec.loader.exec_module(m);"
+        f"m.BASE_ROOT={str(demo_root / '01 发票整理')!r};"
+        f"m.DONE_DIR={str(demo_root / '01 发票整理' / '03 已完成')!r};"
+        f"m.TRIP_ROOT={str(demo_root / '02 行程与员工报销单')!r};"
+        "m._extract_text_for_existing_invoice=lambda path: '销售方名称：中山市东区某某酒店有限公司\\n商品名称：住宿服务';"
+        "m.migrate_done_lodging_city_names();"
+    )
+    result = subprocess.run(["python3", "-c", code], text=True, capture_output=True)
+    new_file = done_dir / "2026-01-05_住宿_264.00_中山_0624_WB_001.pdf"
+    trip_new_file = trip_lodging_dir / "2026-01-05_住宿_264.00_中山_0624_WB_001.pdf"
+    trip_list = trip_lodging_dir.parent / "发票文件清单.md"
+    marker = demo_root / "01 发票整理" / ".migration_lodging_city_v1_0_11.done"
+    if result.returncode == 0 and new_file.exists() and trip_new_file.exists() and marker.exists() and trip_list.exists() and "中山" in trip_list.read_text(encoding="utf-8"):
+        ok("03 已完成和行程附件住宿旧文件一次性迁移验证通过")
+        return True
+    fail("03 已完成或行程附件住宿旧文件一次性迁移验证失败")
+    print(result.stdout.strip())
+    print(result.stderr.strip())
+    return False
+
+
 def check_codex_validate() -> bool:
     validator = Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
     if not validator.exists() or not CODEX_SKILL_DIR.exists():
@@ -340,6 +401,8 @@ def main() -> int:
         check_install_versions(),
         check_workbuddy_script_sync(),
         check_codex_validate(),
+        check_lodging_city_naming(),
+        check_lodging_done_migration(),
         check_trigger_stdin_ignored(),
         check_stdin_trip_import(),
         check_git_clean(args.allow_dirty),

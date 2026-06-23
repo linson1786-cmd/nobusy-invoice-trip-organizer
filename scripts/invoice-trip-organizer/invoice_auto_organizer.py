@@ -73,7 +73,7 @@ try:
         # 重建正则 (VALID_CATEGORIES 可能已被覆盖)
         STANDARD_NAME_RE = re.compile(
             r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-            r'(?:_([^_\d]+-[^_\d]+))?'   # Optional route
+            r'(?:_([^_\d]+(?:-[^_\d]+)?))?'   # Optional route/city
             r'(?:_(\d{1,4}))?'            # Optional suffix
             r'(?:_(\d{4})_(WB|YB))?'      # Optional status
             r'(?:_(\d{3}))?'              # Optional seq
@@ -113,7 +113,7 @@ def is_business_file(path):
 # 标准文件名正则 (确保在 config 覆盖后是最新版本)
 STANDARD_NAME_RE = re.compile(
     r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-    r'(?:_([^_\d]+-[^_\d]+))?'   # Optional route: 出发地-到达地
+    r'(?:_([^_\d]+(?:-[^_\d]+)?))?'   # Optional route/city: 出发地-到达地 或 住宿城市
     r'(?:_(\d{1,4}))?'            # Optional suffix: 发票号后4位或序号
     r'(?:_(\d{4})_(WB|YB))?'      # Optional status: 操作日期_报销状态(WB未报/YB已报)
     r'(?:_(\d{3}))?'              # Optional seq: 序号编号(3位数字)
@@ -645,6 +645,61 @@ def extract_city_from_text(text):
     return cities
 
 
+HOTEL_CITY_KEYWORDS = [
+    "酒店", "宾馆", "住宿", "客栈", "旅店", "饭店", "公寓", "民宿",
+    "华住", "全季", "汉庭", "如家", "亚朵", "维也纳", "锦江", "丽枫",
+    "希尔顿", "万豪", "喜来登", "皇冠假日", "智选假日"
+]
+
+
+def _first_city_in_text(text):
+    """返回文本中第一个城市名。"""
+    if not text:
+        return None
+    for city in MAJOR_CITIES:
+        if city in text:
+            return city
+    return None
+
+
+def extract_lodging_city(text):
+    """住宿类发票专用：提取酒店所在城市，用于文件名中的位置字段。
+
+    优先级：
+    1. 销售方名称中的城市；
+    2. 包含酒店/住宿关键词的行；
+    3. 地址/销售方地址字段；
+    4. 全文城市关键词兜底。
+    """
+    if not text:
+        return None
+
+    seller = extract_seller_name_from_text(text)
+    city = _first_city_in_text(seller)
+    if city:
+        return city
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        if any(keyword in line for keyword in HOTEL_CITY_KEYWORDS):
+            city = _first_city_in_text(line)
+            if city:
+                return city
+
+    for pattern in [
+        r'(?:销售方)?地址[：:\s]*(.+)',
+        r'销方地址[：:\s]*(.+)',
+        r'经营地址[：:\s]*(.+)',
+    ]:
+        for m in re.finditer(pattern, text):
+            city = _first_city_in_text(m.group(1))
+            if city:
+                return city
+
+    cities = extract_city_from_text(text)
+    return cities[0] if cities else None
+
+
 def extract_stay_date_from_text(text):
     """住宿发票专用：提取入住日期（优先级高于开票日期）
     
@@ -869,6 +924,8 @@ def extract_route(text, cat):
         return extract_route_for_jp(text, cat)
     elif base_cat == "高铁":
         return extract_route_for_gaotie(text, cat)
+    elif base_cat == "住宿":
+        return extract_lodging_city(text)
     return None
 
 
@@ -1018,7 +1075,7 @@ def is_standard_name(filename):
     # 降级匹配：不含序号的标准格式（02待核实中的文件）
     m_noseq = re.match(
         r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-        r'(?:_([^_\d]+-[^_\d]+))?'
+        r'(?:_([^_\d]+(?:-[^_\d]+)?))?'
         r'(?:_(\d{1,4}))?'
         r'(?:_(\d{4})_(WB|YB))?'
         r'(\.\w+)$', filename)
@@ -1031,6 +1088,187 @@ def get_month_from_filename(filename):
     if m:
         return m.group(1)[:7]  # group 1 = 日期(新正则)
     return None
+
+
+def _dedupe_destination(path):
+    """目标文件已存在时追加序号，避免覆盖。"""
+    if not os.path.exists(path):
+        return path
+    stem, ext = os.path.splitext(path)
+    counter = 1
+    candidate = f"{stem}_{counter}{ext}"
+    while os.path.exists(candidate):
+        counter += 1
+        candidate = f"{stem}_{counter}{ext}"
+    return candidate
+
+
+def _extract_text_for_existing_invoice(path):
+    """为已归档文件重新提取文本，用于迁移命名。"""
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        if ext == '.pdf':
+            return extract_pdf_text(path)
+        if ext == '.ofd':
+            return extract_ofd_text(path)
+        if ext == '.xml':
+            return extract_xml_text(path)
+    except Exception:
+        return ""
+    return ""
+
+
+def _build_name_with_location(match, location):
+    """按现有标准字段补入住宿城市，保留发票号、状态、序号等后缀。"""
+    date, cat, amount = match.group(1), match.group(2), match.group(3)
+    suffix = match.group(5) or ""
+    op_date = match.group(6) or ""
+    status = match.group(7) or ""
+    seq = match.group(8) or ""
+    ext = match.group(9)
+
+    parts = [date, cat, amount, location]
+    if suffix:
+        parts.append(suffix)
+    if op_date and status:
+        parts.extend([op_date, status])
+    if seq:
+        parts.append(seq)
+    return "_".join(parts) + ext
+
+
+def _rename_lodging_file_with_city(path):
+    """如果住宿类文件缺少城市字段，则识别城市并重命名。"""
+    filename = os.path.basename(path)
+    m = STANDARD_NAME_RE.match(filename)
+    if not m:
+        return None, "not_standard"
+    cat = m.group(2)
+    base_cat = cat.split("(")[0] if "(" in cat else cat
+    existing_location = m.group(4) or ""
+    if base_cat != "住宿":
+        return None, "not_lodging"
+    if existing_location:
+        return None, "already_has_location"
+
+    text = _extract_text_for_existing_invoice(path)
+    city = extract_lodging_city(text)
+    if not city:
+        return None, "city_not_found"
+
+    new_name = _build_name_with_location(m, city)
+    dst = _dedupe_destination(os.path.join(os.path.dirname(path), new_name))
+    os.rename(path, dst)
+    return dst, "renamed"
+
+
+def _scan_trips_for_invoice_dirs():
+    """扫描行程目录，返回可刷新清单的行程信息。"""
+    trip_root = globals().get('TRIP_ROOT', "")
+    if not trip_root or not os.path.isdir(trip_root):
+        return []
+
+    trips = []
+    for year_name in sorted(os.listdir(trip_root)):
+        year_dir = os.path.join(trip_root, year_name)
+        if not os.path.isdir(year_dir):
+            continue
+        for month_name in sorted(os.listdir(year_dir)):
+            month_dir = os.path.join(year_dir, month_name)
+            if not os.path.isdir(month_dir):
+                continue
+            for folder in sorted(os.listdir(month_dir)):
+                folder_path = os.path.join(month_dir, folder)
+                invoice_dir = os.path.join(folder_path, "02-发票文件")
+                if os.path.isdir(invoice_dir):
+                    trips.append({
+                        'folder_path': folder_path,
+                        'folder_name': folder,
+                        'month_name': month_name,
+                    })
+    return trips
+
+
+def migrate_done_lodging_city_names():
+    """一次性迁移 03 已完成和行程附件中的住宿类旧文件名，补入酒店所在城市。
+
+    场景：用户升级到支持住宿城市命名的新版本后，首次运行发票整理时，
+    对已归档和已复制到行程目录的住宿/住宿(结账单)文件重新识别文本并重命名。
+    """
+    marker = os.path.join(BASE_ROOT, ".migration_lodging_city_v1_0_11.done")
+    if os.path.exists(marker):
+        return
+    if not os.path.isdir(DONE_DIR):
+        return
+
+    done_renamed = 0
+    trip_renamed = 0
+    skipped = 0
+    failed = 0
+    changed_trips = {}
+
+    print(f"\n{'='*60}")
+    print("🏨 一次性迁移：为已完成和行程附件住宿类发票补充酒店城市")
+    print(f"{'='*60}")
+
+    for month_dir in sorted(os.listdir(DONE_DIR)):
+        month_path = os.path.join(DONE_DIR, month_dir)
+        if not os.path.isdir(month_path):
+            continue
+        for filename in sorted(os.listdir(month_path)):
+            if filename.startswith('.') or filename == '台账.md':
+                continue
+            path = os.path.join(month_path, filename)
+            if not is_business_file(path):
+                continue
+            new_path, reason = _rename_lodging_file_with_city(path)
+            if reason == "renamed":
+                done_renamed += 1
+                print(f"   ✅ 03已完成: {filename} → {os.path.basename(new_path)}")
+            elif reason == "city_not_found":
+                failed += 1
+                print(f"   ⚠️ 未识别城市，跳过: {filename}")
+            elif reason in ("already_has_location", "not_standard"):
+                skipped += 1
+
+    for trip in _scan_trips_for_invoice_dirs():
+        invoice_dir = os.path.join(trip['folder_path'], "02-发票文件")
+        lodging_dir = os.path.join(invoice_dir, "住宿")
+        if not os.path.isdir(lodging_dir):
+            continue
+        for filename in sorted(os.listdir(lodging_dir)):
+            path = os.path.join(lodging_dir, filename)
+            if not is_business_file(path):
+                continue
+            new_path, reason = _rename_lodging_file_with_city(path)
+            if reason == "renamed":
+                trip_renamed += 1
+                changed_trips[trip['folder_path']] = trip
+                print(f"   ✅ 行程附件: {filename} → {os.path.basename(new_path)}")
+            elif reason == "city_not_found":
+                failed += 1
+                print(f"   ⚠️ 行程附件未识别城市，跳过: {filename}")
+            elif reason in ("already_has_location", "not_standard"):
+                skipped += 1
+
+    if changed_trips:
+        _update_trip_invoice_lists(list(changed_trips.values()))
+        print(f"   📝 已刷新 {len(changed_trips)} 个行程的发票文件清单")
+
+    try:
+        with open(marker, 'w', encoding='utf-8') as f:
+            f.write(
+                f"migration=lodging_city_v1.0.11\n"
+                f"ran_at={datetime.now().isoformat()}\n"
+                f"done_renamed={done_renamed}\n"
+                f"trip_renamed={trip_renamed}\n"
+                f"skipped={skipped}\n"
+                f"failed={failed}\n"
+            )
+    except Exception as e:
+        print(f"   ⚠️ 迁移标记写入失败: {e}")
+
+    print(f"🏨 迁移完成：03已完成重命名 {done_renamed} 个，行程附件重命名 {trip_renamed} 个，跳过 {skipped} 个，未识别 {failed} 个")
 
 
 # ===== 日志 =====
@@ -1984,6 +2222,9 @@ def main():
     os.makedirs(REVIEW_DIR, exist_ok=True)
 
     print(f"🤖 发票自动整理 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # 升级到支持住宿城市命名后，首次运行时迁移历史 03 已完成文件。
+    migrate_done_lodging_city_names()
 
     # 阶段1: 处理新文件
     success, review, dup_deleted, inbox_log_entries = process_inbox()

@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.11 - 2026-06-24
+
+- Added lodging city extraction for accommodation invoices.
+- Accommodation filenames now support a single city location field, e.g. `2026-01-12_住宿_264.00_中山_0112_WB_043.pdf`.
+- City extraction prioritizes seller name, hotel-related lines, address fields, then full-text city keywords.
+- On first run after upgrade, existing accommodation files in `03 已完成/` and trip attachment folders are scanned once and renamed with the new lodging city rule when a city can be identified.
+- Added a one-time migration marker to avoid repeated renaming.
+- Trip invoice lists are regenerated after trip attachment filenames are migrated.
+- Fixed `version_manager.py` update list so shared upgrades also update `import_trips.py`, `deploy.py`, `release_check.py`, and `config_template.py`.
+- Updated release checks to validate lodging city extraction and single-city filename parsing.
+
 ## v1.0.10 - 2026-06-24
 
 - Fixed WorkBuddy "新增行程" trigger behavior: invalid stdin trigger text no longer blocks the GUI input window.

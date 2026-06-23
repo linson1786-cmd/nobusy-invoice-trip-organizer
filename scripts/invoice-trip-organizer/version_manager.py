@@ -12,7 +12,7 @@ Skill 版本管理器 —— 支持自动更新，不影响用户数据
   from version_manager import check_and_update
   check_and_update(config_path)  # 在脚本入口调用即可
 
-版本号格式：Semantic Versioning（如 1.0.10）
+版本号格式：Semantic Versioning（如 1.0.11）
 """
 
 import os
@@ -35,9 +35,13 @@ SCRIPT_FILES = [
     "download_invoices.py",
     "email_manager.py",
     "upload_files.py",
+    "import_trips.py",
     "setup.py",
     "init.py",
     "audit_03_done.py",
+    "release_check.py",
+    "config_template.py",
+    "deploy.py",
 ]
 
 # 版本相关文档（也参与更新）
