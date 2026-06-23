@@ -42,15 +42,22 @@ def show_input_dialog():
     if system == 'Darwin':
         return show_input_dialog_macos()
     else:
-        return show_input_dialog_tkinter()
+        try:
+            return show_input_dialog_tkinter()
+        except Exception as e:
+            print(f'⚠️ tkinter 窗口启动失败: {e}', flush=True)
+            print('  → 回退到文件编辑器方案...', flush=True)
+            return show_input_dialog_file()
 
 
 def show_input_dialog_macos():
-    """macOS: 优先用 tkinter（支持多行粘贴），回退到 osascript"""
+    """macOS: 优先用 tkinter，失败则回退到文件编辑器方案"""
     try:
         return show_input_dialog_tkinter()
-    except Exception:
-        return None
+    except Exception as e:
+        print(f'⚠️ tkinter 窗口启动失败: {e}', flush=True)
+        print('  → 回退到文件编辑器方案...', flush=True)
+        return show_input_dialog_file()
 
 
 def show_input_dialog_tkinter():
@@ -59,9 +66,10 @@ def show_input_dialog_tkinter():
         import tkinter as tk
         from tkinter import scrolledtext
     except ImportError:
-        print('错误: 无法加载 tkinter', flush=True)
-        print('  macOS: brew install python-tk', flush=True)
-        print('  Ubuntu: sudo apt install python3-tk', flush=True)
+        print('⚠️ 无法加载 tkinter（可能未安装）', flush=True)
+        print('  macOS:   brew install python-tk', flush=True)
+        print('  Ubuntu:  sudo apt install python3-tk', flush=True)
+        print('  Windows: 通常自带，若缺失请重装 Python 勾选 tcl/tk', flush=True)
         return None
 
     result = {"text": None, "submitted": False}
@@ -108,8 +116,8 @@ def show_input_dialog_tkinter():
     root.bind('<Escape>', lambda e: on_cancel())
 
     submit_btn = tk.Button(
-        btn_frame, text="提 交", command=on_submit,
-        width=12, font=("Arial", 11)
+        btn_frame, text="提 交 (Ctrl+Enter)", command=on_submit,
+        width=16, font=("Arial", 11)
     )
     submit_btn.pack(side=tk.LEFT, padx=8)
 
@@ -124,6 +132,93 @@ def show_input_dialog_tkinter():
     if not result["submitted"]:
         return None
     return result["text"]
+
+
+def show_input_dialog_file():
+    """
+    文件编辑器回退方案（全平台通用）：
+    1. 创建临时 txt 文件，写入格式说明
+    2. 用系统默认编辑器打开
+    3. 等待用户填入数据并保存关闭
+    4. 读取文件内容
+    """
+    import tempfile
+    import subprocess
+    import time
+
+    # 创建临时文件
+    tmp_dir = tempfile.gettempdir()
+    tmp_file = os.path.join(tmp_dir, 'import_trips_data.txt')
+
+    template = (
+        "请在下方粘贴行程数据，保存并关闭此文件即可自动导入。\n"
+        "格式：开始日期<Tab>结束日期<Tab>行程路线（可含表头行）\n"
+        "示例：\n"
+        "开始日期\t结束日期\t行程\n"
+        "2026-01-04\t2026-01-09\t广州-上海-南通-杭州-成都-重庆-广州\n"
+        "2026/3/11\t2026/3/14\t广州-中山-深圳-上海-苏州-上海-广州\n"
+        "\n"
+        "======== 请在此行下方粘贴数据（删除以上说明）========\n"
+    )
+
+    with open(tmp_file, 'w', encoding='utf-8') as f:
+        f.write(template)
+
+    print(f'📂 已创建临时文件: {tmp_file}', flush=True)
+    print('   请在打开的编辑器中粘贴行程数据，保存并关闭文件即可。', flush=True)
+    print('   （如果编辑器没有自动打开，请手动打开上述文件）', flush=True)
+
+    # 记录文件修改时间，用于检测用户是否已保存
+    mtime_before = os.path.getmtime(tmp_file)
+
+    # 用系统默认编辑器打开
+    system = platform.system()
+    try:
+        if system == 'Darwin':
+            subprocess.Popen(['open', '-t', tmp_file])  # -t 用默认文本编辑器
+        elif system == 'Windows':
+            os.startfile(tmp_file)  # type: ignore
+        else:
+            subprocess.Popen(['xdg-open', tmp_file])
+    except Exception as e:
+        print(f'⚠️ 无法自动打开编辑器: {e}', flush=True)
+        print(f'   请手动打开: {tmp_file}', flush=True)
+
+    print('   等待您保存并关闭文件...', flush=True)
+
+    # 等待文件被修改（轮询，最多等 10 分钟）
+    timeout = 600  # 10 分钟
+    waited = 0
+    while waited < timeout:
+        time.sleep(2)
+        waited += 2
+        try:
+            mtime_now = os.path.getmtime(tmp_file)
+        except OSError:
+            continue
+        if mtime_now > mtime_before:
+            # 文件被修改了，再等 1 秒确保写入完成
+            time.sleep(1)
+            break
+    else:
+        print('⏰ 等待超时（10分钟），请重新运行。', flush=True)
+        return None
+
+    # 读取文件内容
+    with open(tmp_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # 去掉模板说明部分
+    marker = '======== 请在此行下方粘贴数据（删除以上说明）========'
+    if marker in content:
+        content = content.split(marker, 1)[-1]
+
+    content = content.strip()
+    if not content:
+        print('文件内容为空，取消导入。', flush=True)
+        return None
+
+    return content
 
 
 # ============================================================
