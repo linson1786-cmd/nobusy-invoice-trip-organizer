@@ -1,10 +1,27 @@
 # 个人行程与报销 Skill
 
-> **版本**: V1.0.6  
+> **版本**: V1.0.7  
 > **创建日期**: 2026-06-23  
 > **项目归属**: NoBusy 别虾忙｜AI 管理实战  
 > **负责人**: Linson  
 > **License**: MIT
+> **GitHub**: https://github.com/linson1786-cmd/nobusy-invoice-trip-organizer.git
+
+---
+
+## 固定路径
+
+| 类型 | 路径 |
+|---|---|
+| WorkBuddy 安装目录 | `/Users/linson/.workbuddy/skills/invoice-trip-organizer/` |
+| 本地项目目录 | `/Users/linson/Documents/Personage/AI Tools Learning/WorkBuddy Skills/invoice-trip-organizer/` |
+| GitHub 仓库 | `linson1786-cmd/nobusy-invoice-trip-organizer` |
+
+分工：
+
+- 本地项目目录：源码开发、版本管理、Git 提交；
+- GitHub 仓库：远程版本存档、发布与升级来源；
+- WorkBuddy 安装目录：实际运行目录，不作为源码编辑目录。
 
 ---
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.7 - 2026-06-24
+
+- Fixed version alignment across project source, WorkBuddy installation, and GitHub repository metadata.
+- Fixed `config_template.py` path variables and removed hardcoded demo fallback paths.
+- Added `import_trips.py --file/-f` input mode for file-based trip import.
+- Documented fixed paths for WorkBuddy install directory, local project directory, and GitHub repository.
+
 ## v1.0.6 - 2026-06-23
 
 - Fixed: import_trips.py GUI window not showing in sandbox environment.
