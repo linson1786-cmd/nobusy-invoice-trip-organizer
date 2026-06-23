@@ -336,7 +336,11 @@ def _run_git(args, cwd=None):
 
 
 def check_remote_update():
-    """检查 GitHub 远程仓库是否有新版本可用"""
+    """检查 GitHub 远程仓库是否有新版本可用
+
+    策略：同时尝试 tag 和 VERSION 文件，取最大值。
+    避免「代码已推送但忘打 tag」时检查不到更新。
+    """
     deployed_v = get_deployed_version()
 
     print(f"\n  检查远程更新...")
@@ -344,7 +348,8 @@ def check_remote_update():
     print(f"  仓库地址:   {GITHUB_REPO}")
     print(f"  {'='*40}")
 
-    latest_remote = None
+    tag_version = None    # 从 git tag 获取的版本
+    file_version = None   # 从 VERSION 文件获取的版本
 
     # 方法1：尝试通过 git ls-remote 获取最新 tag
     rc, stdout, stderr = _run_git(["ls-remote", "--tags", "--sort=-v:refname", GITHUB_REPO])
@@ -358,13 +363,13 @@ def check_remote_update():
                 tag_name = ref.replace('refs/tags/', '').lstrip('vV')
                 try:
                     parse_version(tag_name)
-                    if not latest_remote or compare_version(tag_name, latest_remote) > 0:
-                        latest_remote = tag_name
+                    if not tag_version or compare_version(tag_name, tag_version) > 0:
+                        tag_version = tag_name
                 except Exception:
                     continue
 
     # 方法2（备用）：通过 GitHub API 获取 tags
-    if not latest_remote:
+    if not tag_version:
         api_url = GITHUB_REPO.replace('.git', '') + '/tags?per_page=10'
         try:
             req = urllib.request.Request(api_url, headers={"User-Agent": "deploy-py/1.0"})
@@ -374,8 +379,8 @@ def check_remote_update():
                     tag_name = tag_info.get("name", "").lstrip('vV')
                     try:
                         parse_version(tag_name)
-                        if not latest_remote or compare_version(tag_name, latest_remote) > 0:
-                            latest_remote = tag_name
+                        if not tag_version or compare_version(tag_name, tag_version) > 0:
+                            tag_version = tag_name
                     except Exception:
                         continue
         except urllib.error.HTTPError as e:
@@ -389,16 +394,27 @@ def check_remote_update():
             print(f"  API 请求失败: {e}")
 
     # 方法3：直接读取仓库中的 VERSION 文件（raw.githubusercontent.com）
-    if not latest_remote:
-        raw_url = "https://raw.githubusercontent.com/linson1786-cmd/nobusy-invoice-trip-organizer/main/scripts/invoice-trip-organizer/VERSION"
-        try:
-            req = urllib.request.Request(raw_url, headers={"User-Agent": "deploy-py/1.0"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                version_content = resp.read().decode('utf-8').strip()
-                parse_version(version_content)
-                latest_remote = version_content
-        except Exception as e:
-            print(f"  读取远程 VERSION 失败: {e}")
+    # 始终执行，不依赖 tag 是否获取成功
+    raw_url = "https://raw.githubusercontent.com/linson1786-cmd/nobusy-invoice-trip-organizer/main/scripts/invoice-trip-organizer/VERSION"
+    try:
+        req = urllib.request.Request(raw_url, headers={"User-Agent": "deploy-py/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            version_content = resp.read().decode('utf-8').strip()
+            parse_version(version_content)
+            file_version = version_content
+    except Exception as e:
+        print(f"  读取远程 VERSION 失败: {e}")
+
+    # 取 tag 和 VERSION 文件中的最大值
+    latest_remote = None
+    if tag_version and file_version:
+        latest_remote = tag_version if compare_version(tag_version, file_version) >= 0 else file_version
+        if compare_version(file_version, tag_version) > 0:
+            print(f"  注意: VERSION 文件({file_version}) 比 最新tag({tag_version}) 新，以 VERSION 文件为准")
+    elif tag_version:
+        latest_remote = tag_version
+    elif file_version:
+        latest_remote = file_version
 
     # 输出结果
     if latest_remote:
