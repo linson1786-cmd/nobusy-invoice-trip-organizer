@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.6 - 2026-06-23
+
+- Fixed: import_trips.py GUI window not showing in sandbox environment.
+- Added stdin pipe input support: `echo "data" | python3 import_trips.py`.
+- Added AI conversation guide in SKILL.md for collecting trip data without GUI.
+- Updated all version references to 1.0.6.
+
 ## v1.0.5 - 2026-06-23
 
 - Renamed trip import trigger from "导入行程" to "新增行程" to avoid conflict with file import ("导入").
