@@ -1,0 +1,36 @@
+# 依赖清单 - 个人行程与报销 Skill
+# 安装命令: pip install -r requirements.txt
+
+# === PDF 处理 ===
+pdfplumber>=0.10.0
+PyMuPDF>=1.23.0
+
+# === OCR 识别 ===
+pytesseract>=0.3.10
+
+# === 图像处理 ===
+Pillow>=10.0.0
+
+# === PDF 生成 ===
+fpdf2>=2.7.0
+
+# === Excel 处理 ===
+pandas>=2.0.0
+openpyxl>=3.1.0
+
+# === 终端美化（可选） ===
+rich>=13.0.0
+
+# === 邮件处理 ===
+# Python 标准库: imaplib, email
+
+# === 备注 ===
+# 1. Tesseract OCR 需要额外安装:
+#    - macOS: brew install tesseract tesseract-lang
+#    - Ubuntu: sudo apt-get install tesseract-ocr tesseract-ocr-chi-sim
+#    - Windows: https://github.com/UB-Mannheim/tesseract/wiki
+#
+# 2. macOS 可能需要额外字体:
+#    - Arial Unicode.ttf (通常已内置)
+#
+# 3. 所有依赖均为开源免费软件
