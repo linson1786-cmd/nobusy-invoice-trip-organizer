@@ -1,7 +1,7 @@
 ---
 name: invoice-trip-organizer
-description: 个人行程与报销 V1.0.9 | 配置化版本，支持分享与在线升级
-version: 1.0.9
+description: 个人行程与报销 V1.0.10 | 配置化版本，支持分享与在线升级
+version: 1.0.10
 trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发票整理", "行程整理", "导入", "导入文件", "新增行程", "初始化", "初始化设置", "重置", "下载发票", "收发票", "升级", "检查更新"]
 ---
 
@@ -37,8 +37,8 @@ trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发
 
 5. **新增行程** (`import_trips.py`)
    - 触发命令：`新增行程`
-   - **AI 对话场景**（推荐）：AI 在对话中收集用户粘贴的行程数据，通过管道传给脚本
-   - **终端直跑场景**：脚本弹出文本输入窗口，粘贴 Tab 分隔行程数据
+   - **WorkBuddy 正常使用场景**：直接运行脚本，弹出文本输入窗口，粘贴 Tab 分隔行程数据
+   - **Codex/自动化测试场景**：可通过管道传入已整理好的 Tab 分隔行程数据
    - 数据格式：开始日期 + 结束日期 + 行程路线（城市用 - 连接）
    - 支持多种日期格式：2026-01-04、2026/3/11
    - 按日期去重：同日期范围已存在则跳过，仅新增不存在的行程
@@ -63,7 +63,7 @@ trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发
 本项目独立管理，路径：
 `/Users/linson/Documents/Personage/AI Tools Learning/WorkBuddy Skills/`
 
-当前版本：**V1.0.9**
+当前版本：**V1.0.10**
 
 ## 首次使用
 
@@ -85,27 +85,26 @@ cd scripts/invoice-trip-organizer && python3 setup.py init --base-dir /tmp/invoi
 1. 把发票文件放入 `01 待分类/` 目录
 2. 对我说「发票整理」或运行 `cd scripts/invoice-trip-organizer && python3 invoice_auto_organizer.py`
 
-## 新增行程操作指引（AI 必读）
+## 新增行程操作指引
 
-当用户说「新增行程」时，**不要直接运行脚本弹窗**（沙箱环境 GUI 窗口无法显示）。正确流程：
+当用户在 WorkBuddy 中说「新增行程」时，正常执行：
 
-1. **告诉用户**：请把行程数据贴在对话里，每行一条，Tab 分隔：
-   ```
-   开始日期	结束日期	行程
-   2026-01-04	2026-01-09	广州-上海-南通-杭州-成都-重庆-广州
-   ```
-2. **收到数据后**，将数据写入临时文件，通过管道传给脚本：
-   ```bash
-   cat /tmp/trips_data.txt | python3 import_trips.py
-   ```
-   或直接用 heredoc：
-   ```bash
-   python3 import_trips.py << 'TRIPDATA'
-   开始日期	结束日期	行程
-   2026-01-04	2026-01-09	广州-上海
-   TRIPDATA
-   ```
-3. **将脚本输出反馈给用户**（新增了几条、跳过了几条）
+```bash
+python3 import_trips.py
+```
+
+脚本应弹出「新增行程数据」输入窗口，让用户粘贴 Tab 分隔行程数据。
+
+仅在 Codex、无界面环境或自动化测试场景，才使用管道输入：
+
+```bash
+python3 import_trips.py << 'TRIPDATA'
+开始日期	结束日期	行程
+2026-01-04	2026-01-09	广州-上海
+TRIPDATA
+```
+
+如果宿主把「新增行程」等触发词写入 stdin，脚本会忽略该无效 stdin 并继续弹窗。
 
 > 日期格式随意：`2026-01-04`、`2026/3/11`、`2026.3.11` 均可
 > 城市用 `-` 连接，如 `广州-上海-北京`
@@ -114,7 +113,7 @@ cd scripts/invoice-trip-organizer && python3 setup.py init --base-dir /tmp/invoi
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
-| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.9"` |
+| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.10"` |
 | `OBSIDIAN_VAULT` | Obsidian 笔记库根目录 | `~/Documents/MyVault` |
 | `INVOICE_BASE_REL` | 发票整理相对路径 | `个人行程与报销/01 发票整理` |
 | `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程与员工报销单` |
@@ -208,7 +207,7 @@ cp *.py ../../
 
 ### 发布新版本（开发者）
 
-1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.8` → `1.0.9`）
+1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.9` → `1.0.10`）
 2. 在 `scripts/invoice-trip-organizer/CHANGELOG.md` 中记录变更
 3. 如有新增配置项，更新 `config_template.py`
 4. 用户下次运行任意脚本时，自动检测并更新

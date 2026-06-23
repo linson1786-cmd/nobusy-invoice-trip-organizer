@@ -301,6 +301,11 @@ def parse_trips(text):
     return trips
 
 
+def is_valid_trip_input(text):
+    """stdin 内容是否是真正的行程数据，而不是宿主传入的触发词。"""
+    return bool(parse_trips(text or ""))
+
+
 # ============================================================
 # 去重：扫描已有行程
 # ============================================================
@@ -396,11 +401,16 @@ def main():
 
     if not text and not sys.stdin.isatty():
         # 管道输入（AI 对话场景 / 命令行管道）
-        text = sys.stdin.read().strip()
-        if text:
-            print('✅ 从管道接收到行程数据', flush=True)
-        else:
-            text = None
+        # 部分宿主会把触发词（如“新增行程”）写入 stdin。
+        # 只有 stdin 内容能解析出有效行程时才走管道；否则继续弹窗。
+        stdin_text = sys.stdin.read().strip()
+        if stdin_text:
+            if is_valid_trip_input(stdin_text):
+                text = stdin_text
+                print('✅ 从管道接收到行程数据', flush=True)
+            else:
+                print('ℹ️ stdin 未识别为行程数据，改为打开输入窗口', flush=True)
+                text = None
 
     if not text:
         # GUI 窗口（直接终端运行场景）

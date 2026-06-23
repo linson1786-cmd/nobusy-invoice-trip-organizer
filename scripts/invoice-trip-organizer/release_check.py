@@ -276,6 +276,25 @@ def check_stdin_trip_import() -> bool:
     return True
 
 
+def check_trigger_stdin_ignored() -> bool:
+    """确认 WorkBuddy 触发词不会被误判为有效 stdin 行程数据。"""
+    code = (
+        "import importlib.util;"
+        f"spec=importlib.util.spec_from_file_location('it', {str(SCRIPT_DIR / 'import_trips.py')!r});"
+        "m=importlib.util.module_from_spec(spec);"
+        "spec.loader.exec_module(m);"
+        "raise SystemExit(0 if (not m.is_valid_trip_input('新增行程') and m.is_valid_trip_input('开始日期\\t结束日期\\t行程\\n2026-01-04\\t2026-01-06\\t广州-上海-广州\\n')) else 1)"
+    )
+    result = subprocess.run(["python3", "-c", code], text=True, capture_output=True)
+    if result.returncode == 0:
+        ok("触发词 stdin 会被忽略，有效行程 stdin 会被接收")
+        return True
+    fail("触发词 stdin 判定逻辑异常")
+    print(result.stdout.strip())
+    print(result.stderr.strip())
+    return False
+
+
 def check_codex_validate() -> bool:
     validator = Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
     if not validator.exists() or not CODEX_SKILL_DIR.exists():
@@ -321,6 +340,7 @@ def main() -> int:
         check_install_versions(),
         check_workbuddy_script_sync(),
         check_codex_validate(),
+        check_trigger_stdin_ignored(),
         check_stdin_trip_import(),
         check_git_clean(args.allow_dirty),
     ]

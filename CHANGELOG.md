@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.10 - 2026-06-24
+
+- Fixed WorkBuddy "新增行程" trigger behavior: invalid stdin trigger text no longer blocks the GUI input window.
+- Kept valid stdin trip data support for Codex and demo-safe automation.
+- Updated WorkBuddy SKILL.md guidance to make popup input the normal local workflow.
+- Fixed `deploy.py` script list so `import_trips.py` is deployed to the WorkBuddy runtime directory.
+
 ## v1.0.9 - 2026-06-24
 
 - Fixed source drift in `import_trips.py` by adding the documented `--file/-f` mode to the source directory.

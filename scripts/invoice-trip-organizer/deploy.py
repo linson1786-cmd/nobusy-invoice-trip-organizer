@@ -18,7 +18,7 @@
   python3 deploy.py --upgrade    # 从 GitHub 拉取最新版本并自动部署
   python3 deploy.py --check-update  # 仅检查是否有新版本可用
 
-版本号格式：Semantic Versioning（1.0.9）
+版本号格式：Semantic Versioning（1.0.10）
 """
 
 import os
@@ -53,6 +53,7 @@ SCRIPT_FILES = [
     "download_invoices.py",
     "email_manager.py",
     "upload_files.py",
+    "import_trips.py",
     "setup.py",
     "init.py",
     "audit_03_done.py",
