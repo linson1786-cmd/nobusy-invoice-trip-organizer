@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 新增行程 - 批量导入行程数据
-弹出文本输入窗口，粘贴行程数据（Tab分隔），自动创建行程文件夹
+支持两种输入方式：
+  1. 管道输入（推荐，AI 对话场景）：echo "数据" | python3 import_trips.py
+  2. GUI 窗口（直接终端运行）：python3 import_trips.py
 
 数据格式（支持多种日期格式）：
   开始日期	结束日期	行程
@@ -367,10 +369,22 @@ def main():
     print(f'行程根目录: {trip_root}', flush=True)
     print('=' * 50, flush=True)
     print()
-    print('正在打开输入窗口...', flush=True)
 
-    # 1. 弹出输入窗口
-    text = show_input_dialog()
+    # 1. 获取输入数据：优先管道输入，回退 GUI 窗口
+    text = None
+    if not sys.stdin.isatty():
+        # 管道输入（AI 对话场景 / 命令行管道）
+        text = sys.stdin.read().strip()
+        if text:
+            print('✅ 从管道接收到行程数据', flush=True)
+        else:
+            text = None
+
+    if not text:
+        # GUI 窗口（直接终端运行场景）
+        print('正在打开输入窗口...', flush=True)
+        text = show_input_dialog()
+
     if not text:
         print('用户取消了输入，停止执行', flush=True)
         sys.exit(0)
