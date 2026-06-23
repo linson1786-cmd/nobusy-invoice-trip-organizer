@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.5 - 2026-06-23
+
+- Renamed trip import trigger from "导入行程" to "新增行程" to avoid conflict with file import ("导入").
+- Added "导入文件" as a synonym trigger for file import (`upload_files.py`).
+- Updated all version references across the project to 1.0.5 (SKILL.md, setup.py defaults, deploy.py, version_manager.py docstrings).
+- Security: removed `config.py` from repository (contains user paths, should not be tracked).
+
 ## v1.0.4 - 2026-06-23
 
 - Fixed import_trips dialog not appearing on other users' machines.
