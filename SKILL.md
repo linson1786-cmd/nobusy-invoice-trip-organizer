@@ -108,7 +108,7 @@ cd scripts && python3 setup.py init
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
-| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.5"` |
+| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.6"` |
 | `OBSIDIAN_VAULT` | Obsidian 笔记库根目录 | `~/Documents/MyVault` |
 | `INVOICE_BASE_REL` | 发票整理相对路径 | `个人行程与报销/01 发票整理` |
 | `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程与个人报销单` |
@@ -202,7 +202,7 @@ cp *.py ../../
 
 ### 发布新版本（开发者）
 
-1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.4` → `1.0.5`）
+1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.5` → `1.0.6`）
 2. 在 `scripts/invoice-trip-organizer/CHANGELOG.md` 中记录变更
 3. 如有新增配置项，更新 `config_template.py`
 4. 用户下次运行任意脚本时，自动检测并更新
