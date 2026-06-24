@@ -2875,6 +2875,49 @@ def process_inbox():
     return success, review, dup_deleted, inbox_log_entries
 
 
+# ===== v1.0.30: 重新识别 02 待核实中的文件 =====
+
+def reprocess_review_files():
+    """把 02 待核实/ 中的文件移回 01 待分类/，让新逻辑有机会重新识别
+
+    解决升级后新增类别（如高铁比价图、住宿比价图）无法识别已在 02 待核实的旧文件的问题。
+    移动前检查 01 待分类/ 中是否有同名文件，避免覆盖。
+    """
+    if not os.path.isdir(REVIEW_DIR):
+        return
+
+    files = [f for f in os.listdir(REVIEW_DIR)
+             if not f.startswith('.') and f not in ['日志.md', '台账.md']
+             and os.path.isfile(os.path.join(REVIEW_DIR, f))]
+
+    if not files:
+        return
+
+    moved = 0
+    skipped = 0
+    os.makedirs(INPUT_DIR, exist_ok=True)
+
+    print(f"\n🔄 重新识别 02 待核实/ 中的 {len(files)} 个文件...")
+    for f in files:
+        src = os.path.join(REVIEW_DIR, f)
+        dst = os.path.join(INPUT_DIR, f)
+
+        # 检查 01 待分类/ 中是否已有同名文件
+        if os.path.exists(dst):
+            # 加后缀避免覆盖
+            name, ext = os.path.splitext(f)
+            counter = 1
+            while os.path.exists(dst):
+                dst = os.path.join(INPUT_DIR, f"{name}_{counter}{ext}")
+                counter += 1
+            print(f"   ⚠️ 重名，改为: {os.path.basename(dst)}")
+
+        shutil.move(src, dst)
+        moved += 1
+
+    print(f"   ✅ 已移回 01 待分类/: {moved} 个（将在 Phase 1 重新识别）")
+
+
 # ===== 阶段2: 处理 02 待核实（已手动核实的文件）=====
 
 def process_review():
@@ -3027,6 +3070,9 @@ def main():
     os.makedirs(REVIEW_DIR, exist_ok=True)
 
     print(f"🤖 发票自动整理 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # v1.0.30: 把 02 待核实/ 中的文件移回 01 待分类/ 重新识别
+    reprocess_review_files()
 
     # 升级到支持住宿城市命名后，首次运行时迁移历史 03 已完成文件。
     migrate_done_lodging_city_names()
