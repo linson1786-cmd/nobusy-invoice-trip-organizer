@@ -59,7 +59,7 @@ scripts/config.py
 # 日志文件
 *.log
 scripts/.organizer_log.json
-项目管理/项目记忆/
+项目管理/
 
 # 测试生成的临时文件
 *.tmp
