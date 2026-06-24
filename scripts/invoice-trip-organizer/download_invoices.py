@@ -12,6 +12,8 @@ import email as emaillib
 import os
 import sys
 import re
+import json
+import hashlib
 from email.header import decode_header
 from datetime import datetime, timedelta
 
@@ -43,6 +45,59 @@ try:
                 DOWNLOAD_DIR = os.path.join(invoice_root, "01 待分类")
 except Exception:
     pass
+
+# ===== 去重相关 =====
+_DATA_DIR = os.path.expanduser("~/.invoice-trip")
+_MSGIDS_FILE = os.path.join(_DATA_DIR, "downloaded_msgids.json")
+
+
+def load_downloaded_msgids():
+    """加载已下载过的邮件 Message-ID 集合"""
+    try:
+        with open(_MSGIDS_FILE, 'r') as f:
+            data = json.load(f)
+        return set(data.get('msgids', []))
+    except Exception:
+        return set()
+
+
+def save_downloaded_msgids(msgids):
+    """保存已下载过的邮件 Message-ID"""
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    with open(_MSGIDS_FILE, 'w') as f:
+        json.dump({'msgids': list(msgids)}, f, ensure_ascii=False, indent=2)
+
+
+def build_existing_hashes():
+    """预扫描 01 待分类 + 03 已完成，构建已有文件的 MD5 哈希集合。
+    用于下载附件时精确去重——同一张发票不会重复下载。
+    """
+    hashes = set()
+    scan_dirs = []
+    try:
+        scan_dirs.append(getattr(config, 'INPUT_DIR', None))   # 01 待分类
+        scan_dirs.append(getattr(config, 'DONE_DIR', None))    # 03 已完成
+    except Exception:
+        pass
+
+    total = 0
+    for scan_dir in scan_dirs:
+        if not scan_dir or not os.path.isdir(scan_dir):
+            continue
+        for root, dirs, files in os.walk(scan_dir):
+            for fn in files:
+                if fn.startswith('.') or fn == '台账.md':
+                    continue
+                fpath = os.path.join(root, fn)
+                try:
+                    with open(fpath, 'rb') as f:
+                        md5 = hashlib.md5(f.read()).hexdigest()
+                    hashes.add(md5)
+                    total += 1
+                except Exception:
+                    pass
+
+    return hashes, total
 
 
 def decode_str(s):
@@ -164,17 +219,32 @@ def has_invoice_attachment(part, subject=""):
     return None
 
 
-def download_from_msg(msg_bytes, download_dir):
+def download_from_msg(msg_bytes, download_dir, existing_hashes):
+    """从单封邮件中下载发票附件。
+    
+    去重逻辑：
+    1. 下载附件后计算 MD5，与 existing_hashes（01 待分类 + 03 已完成）比对
+    2. 命中则跳过，不保存
+    3. 保存成功后实时更新 existing_hashes，同批次内也能去重
+    """
     msg = emaillib.message_from_bytes(msg_bytes)
     subject = decode_str(msg.get("Subject", "(无主题)"))
     date = msg.get("Date", "")
+    msg_id = msg.get("Message-ID", "")
 
     downloaded = []
+    skipped_dup = 0
     for part in msg.walk():
         fname = has_invoice_attachment(part, subject)
         if fname:
             payload = part.get_payload(decode=True)
             if not payload:
+                continue
+            # 计算 MD5，检查是否已存在
+            file_md5 = hashlib.md5(payload).hexdigest()
+            if file_md5 in existing_hashes:
+                skipped_dup += 1
+                print(f"  ⏭️  {fname}  （已有相同文件，跳过）")
                 continue
             base_path = os.path.join(download_dir, fname)
             base, ext = os.path.splitext(base_path)
@@ -185,6 +255,7 @@ def download_from_msg(msg_bytes, download_dir):
                 counter += 1
             with open(out_path, "wb") as f:
                 f.write(payload)
+            existing_hashes.add(file_md5)  # 实时更新索引
             downloaded.append({
                 "filename": os.path.basename(out_path),
                 "filepath": out_path,
@@ -192,7 +263,7 @@ def download_from_msg(msg_bytes, download_dir):
                 "date": date,
             })
             print(f"  ✅ {os.path.basename(out_path)}  （主题：{subject[:40]}）")
-    return downloaded
+    return downloaded, skipped_dup, msg_id
 
 
 def main():
@@ -247,10 +318,25 @@ def main():
 
         email_ids = search_emails(mail, start_date)
 
+        # ===== 去重预处理 =====
+        # 1. 预扫描 01 待分类 + 03 已完成，构建已有文件 MD5 索引
+        print("🔍 预扫描已有文件，构建去重索引...")
+        existing_hashes, scanned_count = build_existing_hashes()
+        print(f"   已扫描 {scanned_count} 个文件，构建哈希索引完成\n")
+
+        # 2. 加载已下载过的邮件 Message-ID
+        downloaded_msgids = load_downloaded_msgids()
+        if downloaded_msgids:
+            print(f"📭 已记录 {len(downloaded_msgids)} 封已下载邮件\n")
+
         # 搜索后，按邮件日期过滤到 end_date
         # IMAP SINCE 只能搜起始日，结束日需手动过滤
         all_files = []
         total_checked = 0
+        total_skipped_msgid = 0  # Message-ID 去重跳过的邮件数
+        total_skipped_dup = 0    # MD5 去重跳过的附件数
+        new_msgids = []          # 本次新下载的邮件 Message-ID
+
         for i, eid in enumerate(email_ids, 1):
             eid_str = eid.decode()
             resp, data = mail.fetch(eid_str, "(RFC822)")
@@ -275,14 +361,31 @@ def main():
                 if msg_date and msg_date > end_date + timedelta(days=1):
                     continue
 
+                # 第一层去重：邮件 Message-ID
+                msg_id = msg.get("Message-ID", "")
+                if msg_id and msg_id in downloaded_msgids:
+                    total_skipped_msgid += 1
+                    continue
+
                 total_checked += 1
-                files = download_from_msg(data[0][1], DOWNLOAD_DIR)
+                files, skipped_dup, dl_msg_id = download_from_msg(
+                    data[0][1], DOWNLOAD_DIR, existing_hashes
+                )
                 if files:
                     all_files.extend(files)
+                total_skipped_dup += skipped_dup
+                # 记录已处理邮件的 Message-ID
+                if dl_msg_id:
+                    new_msgids.append(dl_msg_id)
+                    downloaded_msgids.add(dl_msg_id)
             except Exception as e:
                 print(f"  ⚠️  [{i}] 处理出错：{e}")
 
         mail.logout()
+
+        # 保存更新后的 Message-ID 记录
+        if new_msgids:
+            save_downloaded_msgids(downloaded_msgids)
 
         print(f"\n{'=' * 50}")
         print(f"📊 下载完成")
@@ -290,6 +393,10 @@ def main():
         print(f"   范围：{start_date.strftime('%Y-%m-%d')} ～ {end_date.strftime('%Y-%m-%d')}")
         print(f"   检查：{total_checked} 封邮件")
         print(f"   成功：{len(all_files)} 个发票附件")
+        if total_skipped_msgid > 0:
+            print(f"   跳过(邮件已下载)：{total_skipped_msgid} 封")
+        if total_skipped_dup > 0:
+            print(f"   跳过(附件已存在)：{total_skipped_dup} 个")
         print(f"   路径：{DOWNLOAD_DIR}")
 
         if all_files:

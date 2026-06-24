@@ -113,6 +113,39 @@ def get_next_trip_id(year_dir):
     return max_id + 1
 
 
+def find_existing_trip(start_date, end_date):
+    """
+    扫描已有行程文件夹，按日期范围匹配。
+    返回 (trip_dir, folder_name, trip_id) 或 None。
+    """
+    if not TRIP_ROOT or not os.path.isdir(TRIP_ROOT):
+        return None
+
+    # 匹配出差N-YYYY-MM-DD～YYYY-MM-DD_路线
+    folder_re = re.compile(
+        r'出差(\d+)-(\d{4}-\d{2}-\d{2})[～~](\d{4}-\d{2}-\d{2})'
+    )
+
+    for year_name in os.listdir(TRIP_ROOT):
+        year_dir = os.path.join(TRIP_ROOT, year_name)
+        if not os.path.isdir(year_dir):
+            continue
+        for month_name in os.listdir(year_dir):
+            month_dir = os.path.join(year_dir, month_name)
+            if not os.path.isdir(month_dir):
+                continue
+            for folder_name in os.listdir(month_dir):
+                full_path = os.path.join(month_dir, folder_name)
+                if not os.path.isdir(full_path):
+                    continue
+                m = folder_re.match(folder_name)
+                if m and m.group(2) == start_date and m.group(3) == end_date:
+                    trip_id = int(m.group(1))
+                    return (full_path, folder_name, trip_id)
+
+    return None
+
+
 def parse_args():
     """解析命令行参数"""
     import argparse
@@ -285,9 +318,22 @@ def scan_done_invoices(start_date, end_date):
     return matched
 
 
-def copy_invoices_to_trip(matched, trip_dir):
-    """复制发票到行程附件目录"""
+def copy_invoices_to_trip(matched, trip_dir, clear_existing=False):
+    """复制发票到行程附件目录。clear_existing=True 时先清空各子目录旧文件。"""
     invoice_dir = os.path.join(trip_dir, "02-发票文件")
+    if clear_existing:
+        for subdir in SUBDIRS:
+            sd = os.path.join(invoice_dir, subdir)
+            if os.path.isdir(sd):
+                for old_fn in os.listdir(sd):
+                    old_path = os.path.join(sd, old_fn)
+                    if os.path.isfile(old_path):
+                        os.remove(old_path)
+        # 清除旧清单
+        old_list = os.path.join(invoice_dir, "发票文件清单.md")
+        if os.path.exists(old_list):
+            os.remove(old_list)
+        print(f"   🧹 已清空旧发票附件")
     copied = 0
     for inv in matched:
         dest_dir = os.path.join(invoice_dir, inv['subdir'])
@@ -462,29 +508,38 @@ def main():
 
     year_dir = os.path.join(TRIP_ROOT, f"{year} 年")
 
-    # 确定出差编号
-    if args.trip_id:
-        trip_id = args.trip_id
+    # 去重检查：同日期范围已存在则复用
+    existing = find_existing_trip(start_date, end_date)
+    if existing:
+        trip_dir, folder_name, trip_id = existing
+        print(f"📌 行程自动整理 - 出差{trip_id}（复用已有目录）")
+        print(f"   日期: {start_date}～{end_date}")
+        print(f"   路线: {'-'.join(route_list)}")
+        print(f"   ⏭️  已存在: {folder_name}")
     else:
-        trip_id = get_next_trip_id(year_dir)
+        # 确定出差编号
+        if args.trip_id:
+            trip_id = args.trip_id
+        else:
+            trip_id = get_next_trip_id(year_dir)
 
-    print(f"🧳 行程自动整理 - 出差{trip_id}")
-    print(f"   日期: {start_date}～{end_date}")
-    print(f"   路线: {'-'.join(route_list)}")
+        print(f"🧳 行程自动整理 - 出差{trip_id}")
+        print(f"   日期: {start_date}～{end_date}")
+        print(f"   路线: {'-'.join(route_list)}")
 
-    # 1. 创建行程文件夹
-    trip_dir, folder_name = create_trip_folder(trip_id, start_date, end_date, route_list, year, month)
+        # 1. 创建行程文件夹
+        trip_dir, folder_name = create_trip_folder(trip_id, start_date, end_date, route_list, year, month)
 
-    # 2. 生成行程详情MD
-    gen_trip_detail_md(trip_id, start_date, end_date, route_list, trip_dir, folder_name)
+        # 2. 生成行程详情MD
+        gen_trip_detail_md(trip_id, start_date, end_date, route_list, trip_dir, folder_name)
 
     # 3. 扫描03已完成中的匹配发票
     print(f"\n🔍 扫描03已完成中 {start_date}～{end_date} 的发票...")
     matched = scan_done_invoices(start_date, end_date)
 
-    # 4. 复制发票到行程附件目录
+    # 4. 复制发票到行程附件目录（复用时清空旧文件重新复制）
     if matched:
-        copy_invoices_to_trip(matched, trip_dir)
+        copy_invoices_to_trip(matched, trip_dir, clear_existing=existing is not None)
 
     # 5. 生成发票文件清单MD
     md_path, count_reimburse, total_reimburse = gen_invoice_list_md(

@@ -432,29 +432,30 @@ def main():
         print(f'  {start} ~ {end}  {"-".join(route)}', flush=True)
     print()
 
-    # 3. 获取已有行程，去重
+    # 3. 获取已有行程，分流新建/刷新
     existing = get_existing_trips(trip_root)
 
     new_trips = []
-    skipped = []
+    refresh_trips = []
     for start, end, route in trips:
         if (start, end) in existing:
-            skipped.append((start, end, route))
+            refresh_trips.append((start, end, route))
         else:
             new_trips.append((start, end, route))
 
-    if skipped:
-        print(f'⏭️  跳过 {len(skipped)} 条已存在行程:', flush=True)
-        for start, end, route in skipped:
+    if refresh_trips:
+        print(f'🔄 将刷新 {len(refresh_trips)} 条已有行程:', flush=True)
+        for start, end, route in refresh_trips:
             print(f'  {start} ~ {end}  {"-".join(route)}', flush=True)
         print()
 
-    if not new_trips:
-        print('所有行程已存在，无需新增', flush=True)
-        sys.exit(0)
+    if new_trips:
+        print(f'📌 将新增 {len(new_trips)} 条行程', flush=True)
+        print()
 
-    print(f'📌 将新增 {len(new_trips)} 条行程', flush=True)
-    print()
+    if not new_trips and not refresh_trips:
+        print('没有需要处理的行程', flush=True)
+        sys.exit(0)
 
     # 4. 导入 trip_auto_organizer 模块
     trip_ao_path = os.path.join(_script_dir, "trip_auto_organizer.py")
@@ -466,21 +467,29 @@ def main():
     trip_ao = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(trip_ao)
 
-    # 5. 逐条创建行程
+    # 5. 逐条处理行程（新建或刷新已有）
+    all_trips = new_trips + refresh_trips
     success_count = 0
+    refresh_count = 0
     failed_count = 0
 
-    for start_date, end_date, route_list in new_trips:
+    for start_date, end_date, route_list in all_trips:
         year = start_date[:4]
         month = int(start_date[5:7])
         year_dir = os.path.join(trip_root, f"{year} 年")
+        month_str = f"{month} 月"
 
-        # 每次重新获取下一个出差编号（前面创建的会影响编号）
-        trip_id = trip_ao.get_next_trip_id(year_dir)
+        # 去重检查：同日期范围已存在则复用
+        existing = trip_ao.find_existing_trip(start_date, end_date)
+        if existing:
+            trip_dir, folder_name, trip_id = existing
+            print(f'🔄 刷新出差{trip_id}: {start_date}～{end_date} {"-".join(route_list)}（复用已有目录）', flush=True)
+            is_refresh = True
+        else:
+            # 每次重新获取下一个出差编号（前面创建的会影响编号）
+            trip_id = trip_ao.get_next_trip_id(year_dir)
+            print(f'🧳 创建出差{trip_id}: {start_date}～{end_date} {"-".join(route_list)}', flush=True)
 
-        print(f'🧳 创建出差{trip_id}: {start_date}～{end_date} {"-".join(route_list)}', flush=True)
-
-        try:
             # 创建行程文件夹
             trip_dir, folder_name = trip_ao.create_trip_folder(
                 trip_id, start_date, end_date, route_list, year, month
@@ -490,14 +499,15 @@ def main():
             trip_ao.gen_trip_detail_md(
                 trip_id, start_date, end_date, route_list, trip_dir, folder_name
             )
+            is_refresh = False
 
-            # 扫描匹配发票
+        try:
+            # 扫描匹配发票（复用时清空旧文件重新复制）
             matched = trip_ao.scan_done_invoices(start_date, end_date)
             if matched:
-                trip_ao.copy_invoices_to_trip(matched, trip_dir)
+                trip_ao.copy_invoices_to_trip(matched, trip_dir, clear_existing=is_refresh)
 
             # 生成发票文件清单
-            month_str = f"{month} 月"
             _, count_reimburse, total_reimburse = trip_ao.gen_invoice_list_md(
                 matched, trip_dir, folder_name, month_str
             )
@@ -508,8 +518,12 @@ def main():
                 count_reimburse, total_reimburse
             )
 
-            success_count += 1
-            print(f'  ✅ 完成', flush=True)
+            if is_refresh:
+                refresh_count += 1
+                print(f'  ✅ 刷新完成', flush=True)
+            else:
+                success_count += 1
+                print(f'  ✅ 完成', flush=True)
         except Exception as e:
             failed_count += 1
             print(f'  ❌ 失败: {e}', flush=True)
@@ -517,8 +531,12 @@ def main():
 
     # 6. 汇总
     print('=' * 50, flush=True)
-    print(f'导入完成: 新增 {success_count} 条, 跳过 {len(skipped)} 条已存在'
-          + (f', 失败 {failed_count} 条' if failed_count else ''), flush=True)
+    parts = [f'新增 {success_count} 条']
+    if refresh_count:
+        parts.append(f'刷新 {refresh_count} 条已有')
+    if failed_count:
+        parts.append(f'失败 {failed_count} 条')
+    print(f'导入完成: ' + ', '.join(parts), flush=True)
     print('=' * 50, flush=True)
 
 

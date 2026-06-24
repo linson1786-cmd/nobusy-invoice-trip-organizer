@@ -1442,6 +1442,7 @@ def process_inbox():
     archived_dd_amounts = {}        # 已归档的滴滴打车金额: {date_amount_key: True}
     archived_gs_amounts = {}        # 已归档的高速费金额: {date_amount_key: True}
     archived_trip_amounts = {}      # 已归档的行程单金额: {date_amount_key: True}
+    archived_file_keys = set()      # 通用去重索引: {date_cat_label_amount} 无发票号时兜底
     zs_checkout_index = {}          # 住宿(结账单)配对索引: {amount_cities → [(date, filename)]}
     zs_invoice_index = {}           # 住宿发票反向配对索引: {amount_cities → [(date, filename, seller_name)]}
     # 索引结构改为列表，支持同金额多条结账单/发票（不同城市或不同入住日期）
@@ -1479,6 +1480,8 @@ def process_inbox():
                         archived_gs_amounts[da_key] = True
                     elif '行程单' in acat:
                         archived_trip_amounts[da_key] = True
+                    # 通用去重索引: 所有类别都记录 date_cat_amount
+                    archived_file_keys.add(f"{adate}_{acat}_{aamt:.2f}")
                     # 住宿(结账单)索引: 金额+城市 → [(入住日期, 文件名)]
                     # v3.24: 增加城市匹配，避免同金额跨城市误配
                     if acat == '住宿(结账单)':
@@ -1523,7 +1526,7 @@ def process_inbox():
                             zs_invoice_index[zs_amt_key] = []
                         zs_invoice_index[zs_amt_key].append((adate, afn, a_seller))
 
-    print(f"   已归档发票号: {len(archived_inv_nums)} 个 | 滴滴打车金额: {len(archived_dd_amounts)} 个 | 行程单金额: {len(archived_trip_amounts)} 个 | 住宿结账单索引: {len(zs_checkout_index)} 条 | 住宿发票索引: {len(zs_invoice_index)} 条")
+    print(f"   已归档发票号: {len(archived_inv_nums)} 个 | 滴滴打车金额: {len(archived_dd_amounts)} 个 | 行程单金额: {len(archived_trip_amounts)} 个 | 通用去重索引: {len(archived_file_keys)} 条 | 住宿结账单索引: {len(zs_checkout_index)} 条 | 住宿发票索引: {len(zs_invoice_index)} 条")
 
     def move_to_review(src, filename, reason):
         dst = os.path.join(REVIEW_DIR, filename)
@@ -1684,6 +1687,19 @@ def process_inbox():
                     continue
                 seen_invoice_global.add(num)
 
+            # 通用去重: 无发票号时用 date+cat_label+amount 匹配 03 已完成
+            if not inv and date and amount:
+                try:
+                    dup_key = f"{date}_{cat_label}_{float(amount):.2f}"
+                except:
+                    dup_key = f"{date}_{cat_label}_{amount}"
+                if dup_key in archived_file_keys:
+                    os.remove(src)
+                    dup_deleted += 1
+                    inbox_log_entries.append((f, "删除-OFD已归档重复(日期+类别+金额)", "", f"{date} {cat_label} ¥{amount}"))
+                    print(f"      🗑️ 删除（03已完成已存在: {date} {cat_label} ¥{amount}）")
+                    continue
+
             # 尝试OFD→PDF转换（写到临时目录避免权限问题）
             base_name = os.path.splitext(f)[0]
             tmp_pdf = os.path.join('/tmp', f"{base_name}_ofd2pdf.pdf")
@@ -1732,6 +1748,11 @@ def process_inbox():
             next_seq += 1
             success.append((dst, new_name, date, amount, cat_label))
             print(f"      → 03 已完成/{date[:7]}/{new_name}")
+            # 更新通用去重索引
+            try:
+                archived_file_keys.add(f"{date}_{cat_label}_{float(amount):.2f}")
+            except:
+                pass
 
         if ofd_converted > 0 or ofd_dup_removed > 0:
             print(f"\n   📊 OFD预处理汇总: 转换{ofd_converted}个 | 删除重复{ofd_dup_removed}个")
@@ -1906,6 +1927,19 @@ def process_inbox():
                     continue
                 seen_invoice_global.add(num)
 
+            # 通用去重: 无发票号时用 date+cat_label+amount 匹配 03 已完成
+            if not inv and date and amount:
+                try:
+                    dup_key = f"{date}_{cat_label}_{float(amount):.2f}"
+                except:
+                    dup_key = f"{date}_{cat_label}_{amount}"
+                if dup_key in archived_file_keys:
+                    os.remove(src)
+                    dup_deleted += 1
+                    inbox_log_entries.append((f, "删除-XML已归档重复(日期+类别+金额)", "", f"{date} {cat_label} ¥{amount}"))
+                    print(f"      🗑️ 删除（03已完成已存在: {date} {cat_label} ¥{amount}）")
+                    continue
+
             # 尝试XML→PDF转换（写到临时目录避免权限问题）
             base_name = os.path.splitext(f)[0]
             tmp_pdf = os.path.join('/tmp', f"{base_name}_xml2pdf.pdf")
@@ -1957,6 +1991,11 @@ def process_inbox():
             next_seq += 1
             success.append((dst, new_name, date, amount, cat_label))
             print(f"      → 03 已完成/{date[:7]}/{new_name}")
+            # 更新通用去重索引
+            try:
+                archived_file_keys.add(f"{date}_{cat_label}_{float(amount):.2f}")
+            except:
+                pass
 
         if xml_converted > 0 or xml_dup_removed > 0:            print(f"\n   📊 XML预处理汇总: 转换{xml_converted}个 | 删除重复{xml_dup_removed}个")
 
@@ -2154,6 +2193,20 @@ def process_inbox():
             move_to_review(src, f, "金额格式异常")
             continue
 
+        # 通用去重: 无发票号时用 date+cat_label+amount 匹配 03 已完成
+        # 放在日期调整之后，确保用最终归档日期匹配
+        if not inv and date and amount:
+            try:
+                dup_key = f"{date}_{cat_label}_{float(amount):.2f}"
+            except:
+                dup_key = f"{date}_{cat_label}_{amount}"
+            if dup_key in archived_file_keys:
+                os.remove(src)
+                dup_deleted += 1
+                inbox_log_entries.append((f, "删除-PDF已归档重复(日期+类别+金额)", "", f"{date} {cat_label} ¥{amount}"))
+                print(f"   🗑️ 删除（03已完成已存在: {date} {cat_label} ¥{amount}）")
+                continue
+
         # 生成标准文件名 (用含子类型的类别标签)
         # 机票/高铁类含出发地-到达地 (SOP v3.10)
         # v3.20: 末尾增加操作日期与报销状态
@@ -2201,6 +2254,11 @@ def process_inbox():
                 da_key = f"{date}_{float(amount):.2f}"
                 archived_gs_amounts[da_key] = True
             except: pass
+        # 更新通用去重索引
+        try:
+            archived_file_keys.add(f"{date}_{cat_label}_{float(amount):.2f}")
+        except:
+            pass
 
     return success, review, dup_deleted, inbox_log_entries
 
