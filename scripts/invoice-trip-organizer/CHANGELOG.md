@@ -1,5 +1,15 @@
 # 版本变更日志
 
+## 1.0.21 - 2026-06-24
+
+### 修复
+
+- **目录名迁移对 os.path.join 格式 config.py 失效**：`migrate_directory_name()` 原先用正则提取 `BASE_ROOT`，但其他使用人的 config.py 从 `config_template.py` 生成，`BASE_ROOT` 是 `os.path.join()` 计算式而非字符串字面量，正则匹配不到导致迁移静默失败。修复：改为动态加载 config 模块获取实际计算路径，兼容两种 config 格式。
+
+### 改进
+
+- **升级时自动检测目录名迁移**：`deploy.py` 升级流程新增目录名迁移检测步骤，升级完成后自动执行 `migrate_directory_name()`，不再依赖使用人手动运行「刷新」。迁移成功后提示运行「刷新」更新所有数据。
+
 ## 1.0.20 - 2026-06-24
 
 ### 改进
