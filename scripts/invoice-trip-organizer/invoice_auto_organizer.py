@@ -81,7 +81,7 @@ try:
         )
         print(f"✅ 已从 config.py 读取配置 ({len(_overridden)} 项，INPUT_DIR={INPUT_DIR})")
     else:
-        pass
+        print("⚠️ 未找到 config.py，请先运行：python3 setup.py init")
 except Exception as e:
     print(f"⚠️ 读取 config.py 失败: {e}")
 
