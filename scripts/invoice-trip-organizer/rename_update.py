@@ -233,8 +233,9 @@ def scan_and_rename(dry_run=False, check=False):
             # 2. 提取文件文本
             text = _extract_text_for_existing_invoice(fpath) or ''
 
-            # 3. 重新识别类别
-            detected_cat = classify_with_subtype(text, fn)
+            # 3. 重新识别类别（只传 PDF 文本，不传文件名）
+            #    避免旧文件名中的类别名被当成关键词匹配（循环依赖 bug）
+            detected_cat = classify_with_subtype(text, '')
             new_cat = None
             if detected_cat != current_cat:
                 if detected_cat == "其他":
