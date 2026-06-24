@@ -1,5 +1,16 @@
 # 版本变更日志
 
+## 1.0.13 - 2026-06-24
+
+### 新增
+
+- **升级后数据迁移自动化**：版本升级时自动检测已有文件是否需要更新（类别重分类 / 购买方简称）
+  - `deploy.py --upgrade` 和 `version_manager.py` 升级流程自动集成迁移检测
+  - 新增 `LAST_MIGRATION_VERSION` 配置项，记录已迁移版本，避免重复检测
+  - `rename_update.py` 新增 `--check` 模式，静默检测并输出 JSON，供升级流程程序化调用
+  - `deploy.py` 新增 `--migrate` 参数，直接执行数据迁移
+  - 迁移完成后自动更新 `LAST_MIGRATION_VERSION`，重新生成台账
+
 ## 1.0.12 - 2026-06-24
 
 ### 新增

@@ -239,6 +239,10 @@ def generate_config_py(vault_path, skill_version=None):
 # ========== Skill 版本（由版本管理器自动更新，请勿手动修改）==========
 SKILL_VERSION = "{skill_version}"
 
+# ========== 数据迁移版本（记录已执行迁移的版本，由 rename_update.py 自动更新）==========
+# 当 SKILL_VERSION > LAST_MIGRATION_VERSION 时，升级流程会自动检测是否需要数据迁移
+LAST_MIGRATION_VERSION = "{skill_version}"
+
 # ========== 路径配置 ==========
 
 # 项目根目录（个人行程与报销 的父目录）

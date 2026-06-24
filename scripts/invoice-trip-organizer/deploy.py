@@ -58,6 +58,7 @@ SCRIPT_FILES = [
     "init.py",
     "audit_03_done.py",
     "release_check.py",
+    "rename_update.py",
     "config_template.py",
     "deploy.py",
     "VERSION",
@@ -529,12 +530,148 @@ def _do_deploy_from(source_root, source_scripts_dir, target_label=""):
 
     old_ver = deployed_v or "未安装"
 
+    # ===== 数据迁移检测 =====
+    migration_result = check_data_migration(new_version, old_ver)
+
     if failed and not updated:
         return False, f"{action}失败: {', '.join(failed[:3])}"
     elif failed:
         return True, f"{action}成功（部分失败）: {', '.join(failed[:3])}"
     else:
-        return True, f"{action}完成: {old_ver} -> {new_version}"
+        msg = f"{action}完成: {old_ver} -> {new_version}"
+        if migration_result:
+            msg += f" | 数据迁移: {migration_result}"
+        return True, msg
+
+
+def check_data_migration(new_version, old_version):
+    """升级后检测是否需要数据迁移
+
+    调用 rename_update.py --check 检测已有文件是否需要重命名。
+    如果有变更，提示用户确认后执行迁移。
+
+    返回: 迁移结果描述字符串，或 None
+    """
+    rename_script = os.path.join(DEPLOY_SCRIPTS, "rename_update.py")
+    config_path = os.path.join(DEPLOY_SCRIPTS, "config.py")
+
+    if not os.path.exists(rename_script) or not os.path.exists(config_path):
+        return None
+
+    # 调用 rename_update.py --check 获取检测结果
+    import subprocess
+    try:
+        result = subprocess.run(
+            [sys.executable, rename_script, "--check"],
+            capture_output=True, text=True, timeout=300,
+            cwd=DEPLOY_SCRIPTS
+        )
+        output = result.stdout
+    except Exception as e:
+        print(f"  ⚠️ 数据迁移检测失败: {e}")
+        return None
+
+    # 从输出中提取 JSON（跳过 config 加载信息）
+    json_str = None
+    for i, line in enumerate(output.split('\n')):
+        line = line.strip()
+        if line.startswith('{'):
+            json_str = output[output.index(line):]
+            break
+
+    if not json_str:
+        return None
+
+    try:
+        info = json.loads(json_str)
+    except json.JSONDecodeError:
+        return None
+
+    changes = info.get('changes', 0)
+    migration_needed = info.get('needs_migration', False)
+
+    if not migration_needed or changes == 0:
+        print(f"  ✅ 数据迁移检测: 无需更新 ({changes} 个变更)")
+        # 即使无需迁移，也更新 LAST_MIGRATION_VERSION
+        _update_migration_version(config_path, new_version)
+        return None
+
+    # 有变更，提示用户
+    print(f"\n{'='*50}")
+    print(f"  📋 数据迁移检测")
+    print(f"{'='*50}")
+    print(f"  发现 {changes} 个文件需要更新（类别重分类 / 购买方简称）")
+    print(f"  这是版本 {old_version} → {new_version} 的规则变更所致")
+    print()
+
+    # 预览变更
+    print("  📝 变更预览:")
+    try:
+        preview = subprocess.run(
+            [sys.executable, rename_script, "--dry-run"],
+            capture_output=True, text=True, timeout=300,
+            cwd=DEPLOY_SCRIPTS
+        )
+        # 只打印变更明细部分
+        preview_output = preview.stdout
+        if '📝' in preview_output:
+            detail_start = preview_output.index('📝')
+            print(preview_output[detail_start:detail_start+2000])
+    except Exception:
+        pass
+
+    print(f"\n  是否执行数据迁移？")
+    print(f"  [y] 执行迁移  [n] 跳过（稍后可手动运行 rename_update.py）")
+
+    try:
+        answer = input("  请选择 (y/n): ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        answer = 'n'
+
+    if answer != 'y':
+        print(f"  ⏭️ 已跳过数据迁移")
+        print(f"  💡 稍后可运行: python3 rename_update.py")
+        return "已跳过"
+
+    # 执行迁移
+    print(f"\n  🔄 执行数据迁移...")
+    try:
+        result = subprocess.run(
+            [sys.executable, rename_script],
+            capture_output=True, text=True, timeout=600,
+            cwd=DEPLOY_SCRIPTS
+        )
+        print(result.stdout[-2000:] if len(result.stdout) > 2000 else result.stdout)
+        if result.returncode == 0:
+            print(f"  ✅ 数据迁移完成")
+            return f"已更新 {changes} 个文件"
+        else:
+            print(f"  ⚠️ 数据迁移出错: {result.stderr[:500]}")
+            return f"执行出错"
+    except Exception as e:
+        print(f"  ⚠️ 数据迁移失败: {e}")
+        return f"失败: {e}"
+
+
+def _update_migration_version(config_path, version):
+    """更新 config.py 中的 LAST_MIGRATION_VERSION"""
+    if not os.path.exists(config_path):
+        return
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        if 'LAST_MIGRATION_VERSION' in content:
+            new_content = re.sub(
+                r'^LAST_MIGRATION_VERSION\s*=\s*"[^"]*"',
+                f'LAST_MIGRATION_VERSION = "{version}"',
+                content,
+                flags=re.MULTILINE
+            )
+            if new_content != content:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+    except Exception:
+        pass
 
 
 def upgrade(force=False):
@@ -657,6 +794,7 @@ if __name__ == "__main__":
     parser.add_argument("--backup", action="store_true", help="仅创建备份，不更新")
     parser.add_argument("--upgrade", action="store_true", help="从 GitHub 拉取最新版本并自动部署")
     parser.add_argument("--check-update", action="store_true", help="检查远程仓库是否有新版本可用")
+    parser.add_argument("--migrate", action="store_true", help="执行数据迁移（检测并更新已有文件分类/命名）")
 
     args = parser.parse_args()
 
@@ -670,6 +808,15 @@ if __name__ == "__main__":
         show_status()
     elif args.backup:
         backup_only()
+    elif args.migrate:
+        # 直接执行数据迁移
+        rename_script = os.path.join(DEPLOY_SCRIPTS, "rename_update.py")
+        if os.path.exists(rename_script):
+            import subprocess
+            subprocess.run([sys.executable, rename_script], cwd=DEPLOY_SCRIPTS)
+        else:
+            print("❌ rename_update.py 不存在")
+            sys.exit(1)
     else:
         success, msg = deploy(force=args.force)
         if not success:

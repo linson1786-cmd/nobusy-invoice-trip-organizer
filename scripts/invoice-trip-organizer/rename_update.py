@@ -8,18 +8,21 @@
   3. 从文件内容提取购买方名称 → 生成简称，若无则追加
   4. 同步更新行程目录(02 行程与员工报销单/)中的副本
   5. 支持 --dry-run 预览模式（只显示变更，不实际重命名）
+  6. 支持 --check 检测模式（静默检测，输出 JSON，供升级流程调用）
+  7. 迁移完成后自动更新 config.py 的 LAST_MIGRATION_VERSION
 
 使用场景:
   - 升级到含新分类规则的版本后，重新识别已有文件分类
   - 升级到含购买方简称命名规则的版本后，批量更新历史文件
-  - 其他使用人升级版本后执行一次，确保文件名一致
+  - 升级流程（deploy.py / version_manager.py）自动调用检测
 
 用法:
   python3 rename_update.py --dry-run     # 预览变更
   python3 rename_update.py               # 执行重命名
+  python3 rename_update.py --check       # 静默检测，输出 JSON
 """
 
-import os, re, sys, shutil
+import os, re, sys, shutil, json
 from datetime import datetime
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -169,11 +172,17 @@ def find_trip_copies(old_filename, trip_root):
     return copies
 
 
-def scan_and_rename(dry_run=False):
-    """扫描 03 已完成，重新识别类别 + 追加购买方简称，更新文件名"""
+def scan_and_rename(dry_run=False, check=False):
+    """扫描 03 已完成，重新识别类别 + 追加购买方简称，更新文件名
+
+    参数:
+      dry_run: 预览模式，不实际修改文件
+      check: 检测模式，静默运行，不打印详细报告，返回 stats 供程序化调用
+    """
     if not os.path.isdir(DONE_DIR):
-        print(f"❌ 03 已完成目录不存在: {DONE_DIR}")
-        return
+        if not check:
+            print(f"❌ 03 已完成目录不存在: {DONE_DIR}")
+        return {'total': 0, 'renamed': 0, 'needs_migration': False}
 
     stats = {
         'total': 0,
@@ -193,9 +202,10 @@ def scan_and_rename(dry_run=False):
     cat_change_detail = {}  # {old_cat → {new_cat: count}}
     rename_log = []
 
-    print(f"{'🔍 [预览模式]' if dry_run else '🔄 [执行模式]'} 升级数据迁移（类别重分类 + 购买方简称）")
-    print(f"📁 扫描目录: {DONE_DIR}")
-    print(f"{'='*60}\n")
+    if not check:
+        print(f"{'🔍 [预览模式]' if dry_run else '🔄 [执行模式]'} 升级数据迁移（类别重分类 + 购买方简称）")
+        print(f"📁 扫描目录: {DONE_DIR}")
+        print(f"{'='*60}\n")
 
     for month_dir_name in sorted(os.listdir(DONE_DIR)):
         month_dir = os.path.join(DONE_DIR, month_dir_name)
@@ -296,6 +306,11 @@ def scan_and_rename(dry_run=False):
                 stats['renamed'] += 1  # 预览模式也计数
 
     # ===== 输出报告 =====
+    stats['needs_migration'] = stats['renamed'] > 0
+
+    if check:
+        return stats
+
     print(f"\n{'='*60}")
     print(f"📊 更新汇总\n")
     print(f"   扫描文件总数:       {stats['total']}")
@@ -337,12 +352,90 @@ def scan_and_rename(dry_run=False):
     else:
         print(f"\n{'='*60}")
         print("✅ 更新完成！")
+        # 迁移完成后更新 LAST_MIGRATION_VERSION
+        update_migration_version()
         if stats['renamed'] > 0:
             print("💡 建议运行发票整理以更新台账: 对我说「发票整理」")
 
     return stats
 
 
+def update_migration_version():
+    """迁移完成后，更新 config.py 中的 LAST_MIGRATION_VERSION 为当前 SKILL_VERSION"""
+    config_path = os.path.join(SCRIPT_DIR, 'config.py')
+    if not os.path.exists(config_path):
+        return
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception:
+        return
+
+    # 读取当前版本
+    try:
+        from config import SKILL_VERSION
+    except ImportError:
+        return
+
+    if 'LAST_MIGRATION_VERSION' in content:
+        new_content = re.sub(
+            r'^LAST_MIGRATION_VERSION\s*=\s*"[^"]*"',
+            f'LAST_MIGRATION_VERSION = "{SKILL_VERSION}"',
+            content,
+            flags=re.MULTILINE
+        )
+    else:
+        # 追加配置项
+        new_content = content + f'\n# ========== 数据迁移版本（由 rename_update.py 自动更新）==========\nLAST_MIGRATION_VERSION = "{SKILL_VERSION}"\n'
+
+    if new_content != content:
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+        except Exception:
+            pass
+
+
+def check_migration_needed():
+    """检测是否需要数据迁移
+
+    比较 SKILL_VERSION 和 LAST_MIGRATION_VERSION：
+      - SKILL_VERSION > LAST_MIGRATION_VERSION → 可能需要迁移
+      - 否则 → 不需要
+
+    返回: (need_check: bool, current_version: str, migration_version: str)
+    """
+    try:
+        from config import SKILL_VERSION, LAST_MIGRATION_VERSION
+    except ImportError:
+        return False, "0.0.0", "0.0.0"
+
+    def parse_v(v):
+        try:
+            return tuple(int(x) for x in v.strip().split('.')[:3])
+        except (ValueError, AttributeError):
+            return (0, 0, 0)
+
+    need = parse_v(SKILL_VERSION) > parse_v(LAST_MIGRATION_VERSION)
+    return need, SKILL_VERSION, LAST_MIGRATION_VERSION
+
+
 if __name__ == '__main__':
+    check_mode = '--check' in sys.argv
     dry_run = '--dry-run' in sys.argv or '-n' in sys.argv
-    scan_and_rename(dry_run=dry_run)
+
+    if check_mode:
+        # 检测模式：静默运行 dry-run，输出 JSON
+        stats = scan_and_rename(dry_run=True, check=True)
+        need, cur_v, mig_v = check_migration_needed()
+        result = {
+            'needs_migration': stats.get('needs_migration', False),
+            'changes': stats.get('renamed', 0),
+            'skill_version': cur_v,
+            'last_migration_version': mig_v,
+            'migration_check_needed': need,
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        scan_and_rename(dry_run=dry_run)
