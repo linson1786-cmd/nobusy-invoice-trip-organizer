@@ -548,6 +548,25 @@ def _do_deploy_from(source_root, source_scripts_dir, target_label=""):
         print(f"  ⚠️ 目录名迁移检测失败: {e}")
         print()
 
+    # ===== OCR 依赖检测（升级后自动检查）=====
+    try:
+        setup_script = os.path.join(DEPLOY_SCRIPTS, "setup.py")
+        if os.path.exists(setup_script):
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("_setup_ocr", setup_script)
+            setup_mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(setup_mod)
+            ocr_ok, ocr_msg = setup_mod.check_and_install_tesseract(auto_install=True)
+            if ocr_ok:
+                print(f"  🔍 OCR 依赖: {ocr_msg}")
+            else:
+                print(f"  ⚠️  OCR 依赖: {ocr_msg}")
+                print(f"     图片发票识别需要 Tesseract OCR，未安装时图片将移至 02 待核实/")
+            print()
+    except Exception as e:
+        # OCR 检测失败不影响升级流程
+        pass
+
     # ===== 数据迁移检测 =====
     migration_result = check_data_migration(new_version, old_ver)
 
