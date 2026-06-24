@@ -1,6 +1,6 @@
 ---
 name: invoice-trip-organizer
-description: "Organize personal invoice and trip reimbursement files with local scripts. Use when Codex needs to inspect, validate, install, run, or modify the NoBusy invoice-trip-organizer workflow; classify invoices; rename files; generate trip/reimbursement summaries; manage demo-safe data; or update the related GitHub project. Do not use for real reimbursement submission, real email authorization, or approval-system actions without explicit user confirmation. Current version: 1.0.18."
+description: "Organize personal invoice and trip reimbursement files with local scripts. Use when Codex needs to inspect, validate, install, run, or modify the NoBusy invoice-trip-organizer workflow; classify invoices; rename files; generate trip/reimbursement summaries; manage demo-safe data; or update the related GitHub project. Do not use for real reimbursement submission, real email authorization, or approval-system actions without explicit user confirmation. Current version: 1.0.19."
 ---
 
 # invoice-trip-organizer

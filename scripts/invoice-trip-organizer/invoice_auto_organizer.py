@@ -699,7 +699,8 @@ def extract_passenger_name(text):
     return None
 
 
-
+def extract_invoice_number(text):
+    """提取发票号码，返回 (号码, 来源) 或 None"""
     nums26 = re.findall(r'(?<!\d)2[56]\d{18}(?!\d)', text)
     if nums26:
         return nums26[0], "26-prefix"

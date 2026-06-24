@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.19 - 2026-06-24
+
+- Fixed missing `extract_invoice_number` function definition in `invoice_auto_organizer.py`.
+- Restored file recognition flow that failed with `NameError` after v1.0.18 flight comparison screenshot changes.
+
 ## v1.0.18 - 2026-06-24
 
 - Added flight price comparison screenshot recognition as a non-reimbursement file category.

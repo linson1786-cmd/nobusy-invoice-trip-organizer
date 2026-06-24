@@ -1,5 +1,11 @@
 # 版本变更日志
 
+## 1.0.19 - 2026-06-24
+
+### 修复
+
+- **`extract_invoice_number` 函数丢失 bug**：V1.0.18 添加"机票比价图"功能时，`extract_passenger_name` 函数的代码意外覆盖了 `extract_invoice_number` 的 `def` 行，导致该函数被调用 7 次但从未定义，文件识别整理直接报 `NameError`。修复：补回 `def extract_invoice_number(text):` 函数定义行。
+
 ## 1.0.18 - 2026-06-24
 
 ### 新增

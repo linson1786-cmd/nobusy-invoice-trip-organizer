@@ -1,6 +1,6 @@
 # 个人行程与报销 Skill
 
-> **版本**: 1.0.18（见 `scripts/invoice-trip-organizer/VERSION` 文件）
+> **版本**: 1.0.19（见 `scripts/invoice-trip-organizer/VERSION` 文件）
 > **创建日期**: 2026-06-23  
 > **项目归属**: NoBusy 别虾忙｜AI 管理实战  
 > **负责人**: Linson  
