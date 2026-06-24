@@ -1542,12 +1542,13 @@ def save_log(log):
 
 def process_inbox():
     """处理 01 待分类/ 中的新文件
-    
+
     流程:
     1. OFD预处理: 同发票号有PDF→删OFD; 无PDF→提取OFD数据→转PDF→归档
     2. XML预处理: 同发票号有PDF→删XML; 无PDF→提取XML数据→转PDF→归档
     3. PDF处理: 提取日期/金额/类别→归档到03已完成或移到02待核实
     """
+    global OCR_AVAILABLE
     if not os.path.isdir(INPUT_DIR):
         return [], [], 0, []
 
