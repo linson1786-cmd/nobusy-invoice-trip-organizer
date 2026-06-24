@@ -164,7 +164,10 @@ if 'CATEGORY_RULES' not in dir():
         (["充电", "蔚来", "NIO", "换电", "充电桩", "充电费"], "充电费"),
         (["滴滴", "打车", "网约车", "交通运输服务", "客运服务费"], "滴滴打车"),
         (["火车票", "高铁", "车票", "C3775", "二等座", "铁路", "电子客票", "一等座"], "高铁"),
-        (["直飞", "乘机人", "托运行李", "机场燃油", "机票比价"], "机票比价图"),
+        (["直飞", "乘机人", "托运行李", "机场燃油", "机票比价",
+          "飞猪", "携程", "Ctrip", "Trip.com", "去哪儿", "同程旅行",
+          "预订成功", "预定成功", "订单详情",
+          "出发城市", "到达城市", "起降时间", "航班动态"], "机票比价图"),
         (["机票", "航空", "航班", "登机牌", "CA ", "CZ ", "MU ", "HU ",
           "保险服务", "航意航延组合险标准计划", "经纪代理服务", "退票费"], "机票"),
         (["招待", "餐饮", "餐费", "就餐", "餐厅", "饭店", "酒家", "饮食", "菜品",
@@ -572,13 +575,15 @@ def extract_trip_date_for_gaotie(text):
 
 
 def extract_date_for_flight_comparison(text):
-    """机票比价图专用：从"直飞"后提取航班日期
+    """机票比价图/预订截图专用：提取航班日期
 
     识别格式：
     1. "直飞 06-15" / "直飞 06/15" (月-日)
     2. "直飞 2026-06-15" / "直飞 2026/06/15" (完整日期)
     3. "直飞 06月15日" (中文格式)
     4. "直飞\n06-15" (OCR换行)
+    5. "出发日期: 2026-06-15" / "起飞时间 06-15" (预订截图)
+    6. "乘机日期 06月15日" / "航班日期 2026-06-15"
 
     返回: (date_str, source_str) 或 (None, "无航班日期")
     """
@@ -614,6 +619,22 @@ def extract_date_for_flight_comparison(text):
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
             return f"2026-{mo:02d}-{d:02d}", "直飞附近月日"
+
+    # 5. 预订截图格式：出发日期/起飞时间/乘机日期/航班日期 + 完整日期
+    for label in ['出发日期', '起飞时间', '乘机日期', '航班日期', '出发时间', '行程日期']:
+        m = re.search(label + r'[\s：:]*(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
+        if m:
+            y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+                return f"{y}-{mo:02d}-{d:02d}", f"{label}完整日期"
+
+    # 6. 预订截图格式：出发日期/起飞时间/乘机日期/航班日期 + 月-日
+    for label in ['出发日期', '起飞时间', '乘机日期', '航班日期', '出发时间', '行程日期']:
+        m = re.search(label + r'[\s：:]*(\d{1,2})[月\-/.](\d{1,2})', text)
+        if m:
+            mo, d = int(m.group(1)), int(m.group(2))
+            if 1 <= mo <= 12 and 1 <= d <= 31:
+                return f"2026-{mo:02d}-{d:02d}", f"{label}月日"
 
     return None, "无航班日期"
 
@@ -656,8 +677,8 @@ def extract_amount_for_flight_comparison(text):
         if 0 < val < 10000:
             return f"{val:.2f}", "燃油附近金额"
 
-    # 5. 降级：图片中所有金额取最大（机票总价）
-    amounts = re.findall(r'[¥￥]?\s*([\d,]+\.\d{2})', text)
+    # 5. 降级：图片中所有金额取最大（机票总价）— 支持整数和小数
+    amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)', text)
     if amounts:
         nums = [float(a.replace(',', '')) for a in amounts if float(a.replace(',', '')) > 10]
         if nums:
@@ -1160,45 +1181,53 @@ def extract_route(text, cat):
 
 
 def extract_amount_from_text(text):
+    # 金额正则：兼容 ¥1129.00（小数）和 ¥1129（整数）两种格式
+    _amt = r'([\d,]+(?:\.\d{1,2})?)'
     # 策略1: 价税合计 + ¥
     for m in re.finditer(r'价税合计[\s\S]{0,200}', text):
         seg = m.group(0)
-        amts = re.findall(r'[¥￥]\s*([\d,]+\.\d{2})', seg)
+        amts = re.findall(r'[¥￥]\s*' + _amt, seg)
         if amts:
             return max(float(a.replace(',','')) for a in amts).__format__('.2f')
     # 策略2: 小写金额（¥在后面，如"（ 小 写 ） 177.90 ¥"）
-    m = re.search(r'[\(（]\s*小写\s*[)）]\s*([\d,]+\.\d{2})', text)
+    m = re.search(r'[\(（]\s*小写\s*[)）]\s*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
     # 策略3: 大写+¥小写
-    m = re.search(r'[零壹贰叁肆伍陆柒捌玖拾佰仟万亿圆元整]{2,}[\s]*[¥￥]\s*([\d,]+\.\d{2})', text)
+    m = re.search(r'[零壹贰叁肆伍陆柒捌玖拾佰仟万亿圆元整]{2,}[\s]*[¥￥]\s*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
     # 策略4: (小写)¥
-    m = re.search(r'[\(（]小写[\)）][\s\S]{0,30}[¥￥]\s*([\d,]+\.\d{2})', text)
+    m = re.search(r'[\(（]小写[\)）][\s\S]{0,30}[¥￥]\s*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
-    # 策略5: ¥金额取最大
-    amounts = re.findall(r'[¥￥]\s*([\d,]+\.\d{2})', text)
+    # 策略5: ¥金额取最大（支持整数和小数）
+    amounts = re.findall(r'[¥￥]\s*' + _amt, text)
     if amounts:
         nums = [float(a.replace(',', '')) for a in amounts]
         return f"{max(nums):.2f}"
+    # 策略5b: 总价/订单金额/票价 + 整数或小数（预订截图等非发票文件）
+    m = re.search(r'(?:总价|订单金额|票价|总金额|合计金额|实付)[：:\s]*[¥￥]?\s*' + _amt, text)
+    if m:
+        val = float(m.group(1).replace(',', ''))
+        if val > 0:
+            return f"{val:.2f}"
     # 策略6: 消费合计（结账单，多行分隔）
-    m = re.search(r'消费合计[\s\n]*([\d,]+\.\d{2})', text)
+    m = re.search(r'消费合计[\s\n]*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
     # 策略7: 合计X元（行程单）
-    m = re.search(r'合计([\d,]+\.\d{2})元', text)
+    m = re.search(r'合计' + _amt + r'元', text)
     if m:
         return m.group(1).replace(',', '')
     # 策略8: 金额（元）/ 交易金额(元) 格式（高速费通行费等）
-    m = re.search(r'金额[（(]元[）)][：:\s]*([\d,]+\.\d{2})', text)
+    m = re.search(r'金额[（(]元[）)][：:\s]*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
-    m = re.search(r'交易金额[（(]元[）)][：:\s]*([\d,]+\.\d{2})', text)
+    m = re.search(r'交易金额[（(]元[）)][：:\s]*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
-    # 策略9: 所有数字金额取最大（>10，避免提取序号等）
+    # 策略9: 所有数字金额取最大（>10，避免提取序号等）— 仅小数，防止整数误匹配
     amts = re.findall(r'([\d,]+\.\d{2})', text)
     if amts:
         nums = [float(a.replace(',', '')) for a in amts if float(a.replace(',', '')) > 10]
@@ -2878,8 +2907,8 @@ def _update_trip_invoice_lists(trips):
 
 def _gen_master_ledger(all_records, stage_data):
     """生成个人行程与报销总台账（合并三阶段+行程统计）"""
-    NON_REIMBURSE = ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单"]
-    CAT_ORDER = ["机票", "机票(保险)", "高铁", "住宿", "住宿(结账单)", "餐饮",
+    NON_REIMBURSE = ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单", "机票比价图"]
+    CAT_ORDER = ["机票", "机票(保险)", "机票比价图", "高铁", "住宿", "住宿(结账单)", "餐饮",
                  "滴滴打车", "滴滴打车(行程单)", "礼品", "高速费", "高速费(行程单)",
                  "充电费", "其他", "结账单", "行程单", "未分类"]
 
