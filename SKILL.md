@@ -64,7 +64,7 @@ trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发
 本项目独立管理，路径：
 `/Users/linson/Documents/Personage/AI Tools Learning/WorkBuddy Skills/`
 
-当前版本：**V1.0.11**
+当前版本：见 `scripts/VERSION` 文件
 
 ## 首次使用
 
@@ -130,7 +130,7 @@ python3 import_trips.py --file trips.txt
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
-| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.11"` |
+| `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.x"` |
 | `OBSIDIAN_VAULT` | Obsidian 笔记库根目录 | `~/Documents/MyVault` |
 | `INVOICE_BASE_REL` | 发票整理相对路径 | `个人行程与报销/01 发票整理` |
 | `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程与员工报销单` |
@@ -212,7 +212,7 @@ cd scripts/invoice-trip-organizer && python3 version_manager.py
 如果更新后出现问题，可从备份目录恢复：
 
 ```bash
-cd scripts/invoice-trip-organizer/.backup/1.0.4
+cd scripts/invoice-trip-organizer/.backup/<版本号>
 cp *.py ../../
 ```
 
@@ -225,9 +225,9 @@ cp *.py ../../
 
 ### 发布新版本（开发者）
 
-1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.10` → `1.0.11`）
+1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件（如 `1.0.x` → `1.0.y`）
 2. 在 `scripts/invoice-trip-organizer/CHANGELOG.md` 中记录变更
-3. 如有新增配置项，更新 `config_template.py`
+3. 更新 `SKILL.md` frontmatter 中的 `version` 和 `description`
 4. 用户下次运行任意脚本时，自动检测并更新
 
 ## 依赖安装
