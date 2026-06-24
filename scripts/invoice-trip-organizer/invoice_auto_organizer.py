@@ -636,6 +636,31 @@ def extract_date_for_flight_comparison(text):
             if 1 <= mo <= 12 and 1 <= d <= 31:
                 return f"2026-{mo:02d}-{d:02d}", f"{label}月日"
 
+    # 7. OTA截图裸日期：无标签前缀，但日期附近有路线/航班信息
+    #    例: "01-04 周日 广州-上海  2小时20分钟"（去哪儿/飞猪/携程等预订页）
+    #    先试完整日期 YYYY-MM-DD
+    m = re.search(
+        r'(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})'
+        r'[\s\S]{0,40}'
+        r'(?:[\u4e00-\u9fa5]{2,}[-—→]+[\u4e00-\u9fa5]{2,}|飞行|小时)',
+        text)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{y}-{mo:02d}-{d:02d}", "OTA裸完整日期+路线"
+    # 再试月-日格式 MM-DD（行首/换行后的独立日期，后面跟路线或航班时长）
+    m = re.search(
+        r'(?:^|\n\s*)'
+        r'(\d{1,2})[月\-/.](\d{1,2})'
+        r'(?:\s+[\u4e00-\u9fa5]*)?'  # 可选中文（如"周日""AB"误读）
+        r'[\s\S]{0,30}'
+        r'(?:[\u4e00-\u9fa5]{2,}[-—→]+[\u4e00-\u9fa5]{2,}|飞行|小时)',
+        text)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"2026-{mo:02d}-{d:02d}", "OTA裸月日+路线"
+
     return None, "无航班日期"
 
 
