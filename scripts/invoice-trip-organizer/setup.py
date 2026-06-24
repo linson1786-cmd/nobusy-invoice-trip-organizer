@@ -424,6 +424,98 @@ def get_trip_overview_md_content():
 
 
 # ============================================================
+# OCR 依赖检测与自动安装
+# ============================================================
+
+def check_and_install_tesseract(auto_install=True, silent=False):
+    """检测 Tesseract OCR 是否可用，macOS 下自动安装。
+
+    Args:
+        auto_install: macOS 下是否自动执行 brew install
+        silent: 为 True 时只返回结果不打印过程信息
+
+    Returns: (available: bool, message: str)
+    """
+    tesseract_path = shutil.which('tesseract')
+    if tesseract_path:
+        return True, "Tesseract OCR 已安装"
+
+    system = platform.system()
+
+    if system == 'Darwin' and auto_install:
+        brew = shutil.which('brew')
+        if not brew:
+            msg = "Homebrew 未安装，请先安装 Homebrew: https://brew.sh"
+            if not silent:
+                print(f"  ⚠️  {msg}")
+            return False, msg
+
+        if not silent:
+            print("  📦 正在通过 Homebrew 安装 Tesseract OCR（含中文语言包）...")
+            print("     （首次安装可能需要几分钟，请耐心等待）")
+        try:
+            result = subprocess.run(
+                ['brew', 'install', 'tesseract', 'tesseract-lang'],
+                capture_output=True, text=True, timeout=600
+            )
+            if result.returncode == 0:
+                # 验证安装
+                if shutil.which('tesseract'):
+                    if not silent:
+                        print("  ✅ Tesseract OCR 安装成功！")
+                    return True, "Tesseract OCR 安装成功"
+                msg = "安装完成但 tesseract 命令未找到，请重新打开终端后重试"
+                if not silent:
+                    print(f"  ⚠️  {msg}")
+                return False, msg
+            else:
+                stderr_short = (result.stderr or '').strip()[:200]
+                msg = f"brew install 失败: {stderr_short}"
+                if not silent:
+                    print(f"  ❌ {msg}")
+                return False, msg
+        except subprocess.TimeoutExpired:
+            msg = "brew install 超时（10分钟），请手动运行: brew install tesseract tesseract-lang"
+            if not silent:
+                print(f"  ⚠️  {msg}")
+            return False, msg
+        except Exception as e:
+            msg = f"brew install 异常: {e}"
+            if not silent:
+                print(f"  ❌ {msg}")
+            return False, msg
+    elif system == 'Darwin' and not auto_install:
+        msg = "请运行: brew install tesseract tesseract-lang"
+        if not silent:
+            print(f"  📋 {msg}")
+        return False, msg
+    elif system == 'Linux':
+        msg = (
+            "请运行以下命令安装 Tesseract OCR:\n"
+            "     Ubuntu/Debian: sudo apt install tesseract-ocr tesseract-ocr-chi-sim\n"
+            "     CentOS/RHEL:   sudo yum install tesseract tesseract-langpack-chi_sim"
+        )
+        if not silent:
+            print(f"  📋 {msg}")
+        return False, msg
+    elif system == 'Windows':
+        msg = (
+            "请下载安装 Tesseract OCR:\n"
+            "     https://github.com/UB-Mannheim/tesseract/wiki\n"
+            "     安装时勾选 Chinese (Simplified) 语言包\n"
+            "     安装后需将安装路径添加到 PATH 环境变量"
+        )
+        if not silent:
+            print(f"  📋 {msg}")
+        return False, msg
+    else:
+        msg = f"不支持的系统: {system}，请手动安装 Tesseract OCR"
+        if not silent:
+            print(f"  ⚠️  {msg}")
+        return False, msg
+
+
+# ============================================================
 # 初始化设置
 # ============================================================
 
@@ -572,7 +664,15 @@ def do_init(vault_path=None):
             print(f"  ✅ 同步到 skill 目录: {skill_config_path}")
     print()
 
-    # 8. 完成
+    # 8. OCR 依赖检测
+    print("🔍 检查 OCR 依赖...")
+    ocr_ok, ocr_msg = check_and_install_tesseract(auto_install=True)
+    if not ocr_ok:
+        print(f"  ⚠️  图片发票识别需要 Tesseract OCR，未安装时图片将移至 02 待核实/")
+        print()
+    print()
+
+    # 9. 完成
     print("=" * 50)
     print("✅ 初始化设置完成!")
     print()
