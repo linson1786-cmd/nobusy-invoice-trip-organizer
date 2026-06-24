@@ -587,6 +587,8 @@ def extract_date_for_flight_comparison(text):
 
     返回: (date_str, source_str) 或 (None, "无航班日期")
     """
+    _year = datetime.now().year  # 无年份时以当前年份为准
+
     # 1. 直飞 + 完整日期 (2026-06-15 / 2026/06/15)
     m = re.search(r'直飞[\s\n]*(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
     if m:
@@ -599,14 +601,14 @@ def extract_date_for_flight_comparison(text):
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"2026-{mo:02d}-{d:02d}", "直飞月日"
+            return f"{_year}-{mo:02d}-{d:02d}", "直飞月日"
 
     # 3. 直飞 + 中文格式 (06月15日)
     m = re.search(r'直飞[\s\n]*(\d{1,2})月(\d{1,2})日', text)
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"2026-{mo:02d}-{d:02d}", "直飞中文日期"
+            return f"{_year}-{mo:02d}-{d:02d}", "直飞中文日期"
 
     # 4. 直飞后任意位置有日期（放宽搜索范围）
     m = re.search(r'直飞[\s\S]{0,30}?(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
@@ -618,7 +620,7 @@ def extract_date_for_flight_comparison(text):
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"2026-{mo:02d}-{d:02d}", "直飞附近月日"
+            return f"{_year}-{mo:02d}-{d:02d}", "直飞附近月日"
 
     # 5. 预订截图格式：出发日期/起飞时间/乘机日期/航班日期 + 完整日期
     for label in ['出发日期', '起飞时间', '乘机日期', '航班日期', '出发时间', '行程日期']:
@@ -634,7 +636,7 @@ def extract_date_for_flight_comparison(text):
         if m:
             mo, d = int(m.group(1)), int(m.group(2))
             if 1 <= mo <= 12 and 1 <= d <= 31:
-                return f"2026-{mo:02d}-{d:02d}", f"{label}月日"
+                return f"{_year}-{mo:02d}-{d:02d}", f"{label}月日"
 
     # 7. OTA截图裸日期：无标签前缀，但日期附近有路线/航班信息
     #    例: "01-04 周日 广州-上海  2小时20分钟"（去哪儿/飞猪/携程等预订页）
@@ -659,7 +661,7 @@ def extract_date_for_flight_comparison(text):
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"2026-{mo:02d}-{d:02d}", "OTA裸月日+路线"
+            return f"{_year}-{mo:02d}-{d:02d}", "OTA裸月日+路线"
 
     return None, "无航班日期"
 
@@ -1273,6 +1275,7 @@ def extract_amount_from_text(text):
 
 
 def extract_date_from_filename(filename):
+    _year = datetime.now().year  # 无年份时以当前年份为准
     m = re.search(r'(\d{4})(\d{2})(\d{2})\d{6}', filename)
     if m:
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -1285,7 +1288,7 @@ def extract_date_from_filename(filename):
             return f"{y}-{mo:02d}-{d:02d}"
     m = re.search(r'水单(\d{2})(\d{2})', filename)
     if m:
-        return f"2026-{m.group(1)}-{m.group(2)}"
+        return f"{_year}-{m.group(1)}-{m.group(2)}"
     m = re.search(r'结账单(\d{4})(\d{2})(\d{2})', filename)
     if m:
         return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
@@ -1293,13 +1296,13 @@ def extract_date_from_filename(filename):
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"2026-{mo:02d}-{d:02d}"
+            return f"{_year}-{mo:02d}-{d:02d}"
     m = re.search(r'(\d{1,2})月(\d{1,2})[日号]', filename)
     if m:
-        return f"2026-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+        return f"{_year}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
     m = re.search(r'(\d{1,2})月', filename)
     if m:
-        return f"2026-{m.group(1).zfill(2)}-01"
+        return f"{_year}-{m.group(1).zfill(2)}-01"
     return None
 
 
