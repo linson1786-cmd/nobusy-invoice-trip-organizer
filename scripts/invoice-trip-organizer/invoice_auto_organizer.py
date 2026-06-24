@@ -49,7 +49,7 @@ DONE_DIR = ""
 REVIEW_DIR = ""
 LOG_FILE = ""
 
-VALID_CATEGORIES = ["餐饮", "住宿", "机票", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "礼品", "结账单", "其他",
+VALID_CATEGORIES = ["餐饮", "住宿", "机票", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "油电类", "礼品", "结账单", "其他",
                     "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"]
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.heic', '.bmp', '.tiff', '.tif', '.webp']
 PROCESSABLE_EXTENSIONS = ['.pdf'] + IMAGE_EXTENSIONS
@@ -73,7 +73,7 @@ try:
         # 重建正则 (VALID_CATEGORIES 可能已被覆盖)
         STANDARD_NAME_RE = re.compile(
             r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-            r'(?:_([^_\d]+(?:-[^_\d]+)?))?'   # Optional route/city
+            r'(?:_([^_\d]+(?:-[^_\d]+)?(?:_[\u4e00-\u9fa5]{2,10})?))?'   # Optional route/city + buyer
             r'(?:_(\d{1,4}))?'            # Optional suffix
             r'(?:_(\d{4})_(WB|YB))?'      # Optional status
             r'(?:_(\d{3}))?'              # Optional seq
@@ -113,7 +113,7 @@ def is_business_file(path):
 # 标准文件名正则 (确保在 config 覆盖后是最新版本)
 STANDARD_NAME_RE = re.compile(
     r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-    r'(?:_([^_\d]+(?:-[^_\d]+)?))?'   # Optional route/city: 出发地-到达地 或 住宿城市
+    r'(?:_([^_\d]+(?:-[^_\d]+)?(?:_[\u4e00-\u9fa5]{2,10})?))?'   # Optional route/city + buyer: 出发地-到达地_购买方简称
     r'(?:_(\d{1,4}))?'            # Optional suffix: 发票号后4位或序号
     r'(?:_(\d{4})_(WB|YB))?'      # Optional status: 操作日期_报销状态(WB未报/YB已报)
     r'(?:_(\d{3}))?'              # Optional seq: 序号编号(3位数字)
@@ -616,6 +616,104 @@ def extract_seller_name_from_text(text):
     return None
 
 
+def extract_buyer_name_from_text(text):
+    """从PDF/OFD文本提取购买方（买方）名称
+    
+    PDF文本中"名称："出现两次：第一次=购方，第二次=销方
+    返回购方名称字符串，找不到返回None
+    """
+    if not text:
+        return None
+    lines = text.split('\n')
+    
+    # 找所有"名称："位置
+    positions = []
+    for i, line in enumerate(lines):
+        if re.match(r'^名称[：:]', line.strip()):
+            after = ''
+            if '：' in line:
+                after = line.split('：', 1)[1].strip()
+            elif ':' in line:
+                after = line.split(':', 1)[1].strip()
+            positions.append((i, after if after else None))
+    
+    # 第一处"名称"=购方
+    if positions:
+        buyer_pos, buyer_name = positions[0]
+        if buyer_name and len(buyer_name) > 3:
+            return buyer_name
+        # 名称后内容在下一非空行
+        for j in range(buyer_pos + 1, min(buyer_pos + 5, len(lines))):
+            content = lines[j].strip()
+            if content and len(content) > 3 and not content.startswith('统一社会') and not content.startswith('9') and not content.startswith('名称'):
+                return content
+    
+    # 降级: "购买方名称：" / "购方名称："
+    m = re.search(r'(?:购买方|购方)名称[：:\s]+(.+)', text)
+    if m:
+        name = m.group(1).strip()
+        if len(name) > 3:
+            return name
+    
+    return None
+
+
+def shorten_company_name(name):
+    """将公司全称转为简称
+    
+    例：
+    - 上海乐纯生物技术股份有限公司 → 乐纯生物
+    - 北京金达阳光科技有限公司 → 金达阳光
+    - 中国石油化工股份有限公司 → 中石化
+    """
+    if not name:
+        return ""
+    
+    s = name.strip()
+    
+    # 去除常见省市区前缀
+    prefixes = ['中国', '北京', '上海', '广州', '深圳', '广东', '天津', '重庆',
+                '浙江', '江苏', '四川', '山东', '湖北', '湖南', '福建', '安徽',
+                '河南', '河北', '陕西', '辽宁', '吉林', '黑龙江', '云南', '贵州',
+                '广西', '山西', '甘肃', '内蒙古', '新疆', '西藏', '宁夏', '青海',
+                '海南', '江西']
+    for p in prefixes:
+        if s.startswith(p) and len(s) > len(p) + 2:
+            s = s[len(p):]
+            # 去除"省"/"市"后缀
+            if s.startswith('省') or s.startswith('市'):
+                s = s[1:]
+            break
+    
+    # 去除常见公司类型后缀（从长到短匹配）
+    suffixes = ['股份有限公司', '有限责任公司', '科技有限公司',
+                '有限公司', '分公司', '公司', '集团']
+    for suf in suffixes:
+        if s.endswith(suf) and len(s) > len(suf) + 1:
+            s = s[:-len(suf)]
+            break
+    
+    # 去除常见尾部描述词
+    tail_words = ['技术', '科技', '服务', '贸易', '工程', '实业',
+                  '投资', '发展', '管理', '控股']
+    for tw in tail_words:
+        if s.endswith(tw) and len(s) > len(tw) + 1:
+            s = s[:-len(tw)]
+            break
+    
+    s = s.strip()
+    
+    # 结果太长(>6字)时取前4字
+    if len(s) > 6:
+        s = s[:4]
+    
+    # 结果为空或太短(<=1字)时，取原名前4字
+    if len(s) <= 1:
+        s = name[:4].strip()
+    
+    return s
+
+
 # 主要城市列表（用于住宿发票与结账单的城市配对）
 # 如 config.py 已定义，此处不再重复定义
 if 'MAJOR_CITIES' not in dir():
@@ -1027,6 +1125,23 @@ def extract_amount_from_filename(filename):
     return None
 
 
+# 发票内容特征词（用于判断 PDF 是否为发票/报销凭证）
+INVOICE_CONTENT_MARKERS = [
+    "发票号码", "发票代码", "开票日期", "价税合计", "机器编号",
+    "税号", "电子发票", "增值税", "行程报销单", "行程单",
+    "结账单", "住宿费", "通行费", "消费合计", "小写",
+    "收款人", "复核人", "开票人", "销售方", "购买方",
+    " Invoice", "Receipt", "Tax",
+]
+
+
+def has_invoice_markers(text):
+    """检查文本是否包含发票特征词，用于过滤非发票 PDF"""
+    if not text:
+        return False
+    return any(marker in text for marker in INVOICE_CONTENT_MARKERS)
+
+
 def classify(text, filename):
     """返回基础类别（不含子类型），用于流程逻辑判断"""
     s = (text or "") + filename
@@ -1075,7 +1190,7 @@ def is_standard_name(filename):
     # 降级匹配：不含序号的标准格式（02待核实中的文件）
     m_noseq = re.match(
         r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-        r'(?:_([^_\d]+(?:-[^_\d]+)?))?'
+        r'(?:_([^_\d]+(?:-[^_\d]+)?(?:_[\u4e00-\u9fa5]{2,10})?))?'
         r'(?:_(\d{1,4}))?'
         r'(?:_(\d{4})_(WB|YB))?'
         r'(\.\w+)$', filename)
@@ -1589,10 +1704,14 @@ def process_inbox():
             # 机票/高铁类含出发地-到达地 (SOP v3.10)
             # v3.20: 末尾增加操作日期与报销状态
             # v3.22: 序号放在末尾(状态后缀之后)
+            # v3.30: 增加购买方公司简称
+            buyer_name = extract_buyer_name_from_text(text)
+            buyer_short = shorten_company_name(buyer_name) if buyer_name else ""
+            buyer_part = f"_{buyer_short}" if buyer_short else ""
             status_suffix = make_status_suffix()
             route_part = f"_{route}" if route else ""
             seq_suffix = f"_{next_seq:03d}"
-            new_name = f"{date}_{cat_label}_{amount}{route_part}{status_suffix}{seq_suffix}{out_ext}"
+            new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
             month_dir = os.path.join(DONE_DIR, date[:7])
             os.makedirs(month_dir, exist_ok=True)
             dst = os.path.join(month_dir, new_name)
@@ -1600,12 +1719,12 @@ def process_inbox():
             if os.path.exists(dst):
                 if inv:
                     suffix = inv[0][-4:]
-                    new_name = f"{date}_{cat_label}_{amount}{route_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
+                    new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
                     dst = os.path.join(month_dir, new_name)
                 else:
                     counter = 1
                     while os.path.exists(dst):
-                        new_name = f"{date}_{cat_label}_{amount}{route_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
+                        new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
                         dst = os.path.join(month_dir, new_name)
                         counter += 1
 
@@ -1807,10 +1926,17 @@ def process_inbox():
             # 机票/高铁类含出发地-到达地 (SOP v3.10)
             # v3.20: 末尾增加操作日期与报销状态
             # v3.22: 序号放在末尾(状态后缀之后)
+            # v3.30: 增加购买方公司简称（XML优先用结构化字段）
+            if xml_fields:
+                buyer_name = xml_fields.get('buyer_name', '') or extract_buyer_name_from_text(text)
+            else:
+                buyer_name = extract_buyer_name_from_text(text)
+            buyer_short = shorten_company_name(buyer_name) if buyer_name else ""
+            buyer_part = f"_{buyer_short}" if buyer_short else ""
             status_suffix = make_status_suffix()
             route_part = f"_{route}" if route else ""
             seq_suffix = f"_{next_seq:03d}"
-            new_name = f"{date}_{cat_label}_{amount}{route_part}{status_suffix}{seq_suffix}{out_ext}"
+            new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
             month_dir = os.path.join(DONE_DIR, date[:7])
             os.makedirs(month_dir, exist_ok=True)
             dst = os.path.join(month_dir, new_name)
@@ -1818,12 +1944,12 @@ def process_inbox():
             if os.path.exists(dst):
                 if inv:
                     suffix = inv[0][-4:]
-                    new_name = f"{date}_{cat_label}_{amount}{route_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
+                    new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
                     dst = os.path.join(month_dir, new_name)
                 else:
                     counter = 1
                     while os.path.exists(dst):
-                        new_name = f"{date}_{cat_label}_{amount}{route_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
+                        new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
                         dst = os.path.join(month_dir, new_name)
                         counter += 1
 
@@ -2017,6 +2143,11 @@ def process_inbox():
         if not amount:
             move_to_review(src, f, "无法提取金额")
             continue
+
+        # 发票内容校验：非发票 PDF（无发票特征词）移入待核实
+        if not has_invoice_markers(text):
+            move_to_review(src, f, "非发票内容(无发票特征词)")
+            continue
         try:
             amount = f"{float(amount.replace(',','')):.2f}"
         except:
@@ -2027,10 +2158,14 @@ def process_inbox():
         # 机票/高铁类含出发地-到达地 (SOP v3.10)
         # v3.20: 末尾增加操作日期与报销状态
         # v3.22: 序号放在末尾(状态后缀之后)
+        # v3.30: 增加购买方公司简称
+        buyer_name = extract_buyer_name_from_text(text)
+        buyer_short = shorten_company_name(buyer_name) if buyer_name else ""
+        buyer_part = f"_{buyer_short}" if buyer_short else ""
         status_suffix = make_status_suffix()
         route_part = f"_{route}" if route else ""
         seq_suffix = f"_{next_seq:03d}"
-        new_name = f"{date}_{cat_label}_{amount}{route_part}{status_suffix}{seq_suffix}{ext}"
+        new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}{status_suffix}{seq_suffix}{ext}"
         month_dir = os.path.join(DONE_DIR, date[:7])
         os.makedirs(month_dir, exist_ok=True)
         dst = os.path.join(month_dir, new_name)
@@ -2038,12 +2173,12 @@ def process_inbox():
         if os.path.exists(dst):
             if inv:
                 suffix = inv[0][-4:]
-                new_name = f"{date}_{cat_label}_{amount}{route_part}_{suffix}{status_suffix}{seq_suffix}{ext}"
+                new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{ext}"
                 dst = os.path.join(month_dir, new_name)
             else:
                 counter = 1
                 while os.path.exists(dst):
-                    new_name = f"{date}_{cat_label}_{amount}{route_part}_{counter}{status_suffix}{seq_suffix}{ext}"
+                    new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{ext}"
                     dst = os.path.join(month_dir, new_name)
                     counter += 1
 
@@ -2127,7 +2262,7 @@ def process_review():
             # 用简单正则匹配不含序号的标准格式
             m_noseq = re.match(
                 r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-                r'(?:_([^_\d]+-[^_\d]+))?'
+                r'(?:_([^_\d]+(?:-[^_\d]+)?(?:_[\u4e00-\u9fa5]{2,10})?))?'
                 r'(?:_(\d{1,4}))?'
                 r'(?:_(\d{4})_(WB|YB))?'
                 r'(\.\w+)$', f)

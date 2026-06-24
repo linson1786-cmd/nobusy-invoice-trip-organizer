@@ -1,7 +1,7 @@
 ---
 name: invoice-trip-organizer
-description: 个人行程与报销 V1.0.11 | 配置化版本，支持分享与在线升级
-version: 1.0.11
+description: 个人行程与报销 V1.0.12 | 配置化版本，支持分享与在线升级
+version: 1.0.12
 trigger: ["跑一次发票整理", "有新行程", "从邮件下载发票", "发票整理", "行程整理", "导入", "导入文件", "新增行程", "初始化", "初始化设置", "重置", "下载发票", "收发票", "升级", "检查更新"]
 ---
 
@@ -164,14 +164,16 @@ python3 import_trips.py --file trips.txt
 ## 命名规范 (SOP)
 
 ```
-YYYY-MM-DD_类别_金额[_位置][_发票号后4位]_MMDD_WB/YB_NNN.ext
+YYYY-MM-DD_类别_金额[_位置][_购买方简称][_发票号后4位]_MMDD_WB/YB_NNN.ext
 ```
 
 示例：
-- `2026-01-05_餐饮_174.00_0105_WB_031.pdf`
-- `2026-01-10_机票_1280.00_广州-上海_0110_WB_042.pdf`
-- `2026-01-12_住宿_264.00_中山_0112_WB_043.pdf`
+- `2026-01-05_餐饮_174.00_乐纯生物_0105_WB_031.pdf`
+- `2026-01-10_机票_1280.00_广州-上海_乐纯生物_0110_WB_042.pdf`
+- `2026-01-12_住宿_264.00_中山_乐纯生物_0112_WB_043.pdf`
 - `2026-03-24_住宿(结账单)_278.00_0324_WB_075.pdf`
+
+> 购买方简称：从发票PDF/XML内容自动提取购买方公司名称并转为简称（去除省市前缀和公司类型后缀）。无法提取时不添加。
 
 详细规范见 `docs/SOP-发票文件命名标准.md`。
 
@@ -276,6 +278,21 @@ python3 ~/.workbuddy/skills/invoice-trip-organizer/scripts/deploy.py --status
 
 直接对 AI 说「升级发票整理 Skill」或「检查发票整理有没有新版本」，AI 会自动执行上述命令。
 
+### 升级后数据迁移
+
+版本升级新增分类规则或命名规则时，已有文件需要重新识别。执行一次即可：
+
+```bash
+cd scripts/invoice-trip-organizer && python3 rename_update.py --dry-run  # 先预览
+cd scripts/invoice-trip-organizer && python3 rename_update.py             # 执行更新
+```
+
+- **类别重分类**：用最新 CATEGORY_RULES 重新识别每个文件的类别，不匹配的自动更新
+- **购买方简称**：提取购买方公司名称并追加到文件名
+- 同步更新行程目录中的发票副本（如有）
+- 支持 `--dry-run` 预览模式，先查看变更再执行
+- 不会将具体类别降级为"其他"（防止文本提取不完整导致误判）
+
 ## 文件清单
 
 | 文件 | 说明 |
@@ -297,3 +314,4 @@ python3 ~/.workbuddy/skills/invoice-trip-organizer/scripts/deploy.py --status
 | `docs/SOP-发票文件命名标准.md` | 命名规范详细文档 |
 | `audit_03_done.py` | 03 已完成文件排查脚本（维护用） |
 | `release_check.py` | 发布前检查脚本（版本、敏感文件、编译、安装一致性） |
+| `rename_update.py` | 升级后数据迁移（类别重分类 + 购买方简称，升级后执行一次） |

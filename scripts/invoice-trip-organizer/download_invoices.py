@@ -61,13 +61,45 @@ def decode_str(s):
     return "".join(result)
 
 
-def is_invoice_filename(filename):
+def is_invoice_filename(filename, subject=""):
+    """判断文件名是否像发票附件。
+    规则：必须有发票类扩展名 + (文件名或邮件主题含发票关键词) + 不含黑名单关键词
+    """
     if not filename:
         return False
     fname = filename.lower()
-    invoice_kw = ["发票", "invoice", "fapiao", "receipt", "票据", "bill", "报销", "电子发票"]
+
+    # 必须有发票类扩展名
     exts = [".pdf", ".ofd", ".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".xls", ".xlsx"]
-    return any(kw in fname for kw in invoice_kw) or any(fname.endswith(ext) for ext in exts)
+    if not any(fname.endswith(ext) for ext in exts):
+        return False
+
+    # 黑名单：明确非发票的文件名关键词
+    blacklist_kw = [
+        "员工手册", "手册", "发货", "申请表", "申请单", "物料", "通知",
+        "简历", "合同", "规章", "制度", "会议", "培训", "规程", "作业指导",
+    ]
+    if any(kw.lower() in fname for kw in blacklist_kw):
+        return False
+
+    # 白名单：发票/报销相关关键词
+    invoice_kw = [
+        "发票", "invoice", "fapiao", "receipt", "票据", "bill", "报销",
+        "电子发票", "行程单", "结账单", "通行费", "etc", "滴滴", "住宿",
+        "餐饮", "机票", "高铁", "打车", "通行", "收据", "tax", "toll",
+        "通行证", "过路费", "停车费",
+    ]
+
+    # 文件名含白名单关键词 → 通过
+    if any(kw in fname for kw in invoice_kw):
+        return True
+
+    # 文件名无关键词时，检查邮件主题
+    subj = (subject or "").lower()
+    if any(kw in subj for kw in invoice_kw):
+        return True
+
+    return False
 
 
 def connect_and_login(account):
@@ -111,7 +143,7 @@ def search_emails(mail, start_date):
     return ids
 
 
-def has_invoice_attachment(part):
+def has_invoice_attachment(part, subject=""):
     cd = part.get("Content-Disposition", "")
     ct = part.get("Content-Type", "")
 
@@ -127,7 +159,7 @@ def has_invoice_attachment(part):
     if not filename:
         return None
 
-    if is_invoice_filename(filename):
+    if is_invoice_filename(filename, subject):
         return filename
     return None
 
@@ -139,7 +171,7 @@ def download_from_msg(msg_bytes, download_dir):
 
     downloaded = []
     for part in msg.walk():
-        fname = has_invoice_attachment(part)
+        fname = has_invoice_attachment(part, subject)
         if fname:
             payload = part.get_payload(decode=True)
             if not payload:
@@ -179,8 +211,8 @@ def main():
     except Exception:
         pass
 
-    # 是否弹出交互界面（默认自动模式）
-    auto_pick = "--pick" not in sys.argv
+    # 默认弹窗选择邮箱，--auto 参数才自动使用上次邮箱
+    auto_pick = "--auto" in sys.argv
 
     # ===== Step 1: 选择/注册邮箱 =====
     print("=" * 50)
