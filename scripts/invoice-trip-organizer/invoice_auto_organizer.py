@@ -678,9 +678,20 @@ def extract_amount_for_flight_comparison(text):
             return f"{val:.2f}", "燃油附近金额"
 
     # 5. 降级：图片中所有金额取最大（机票总价）— 支持整数和小数
+    # ¥可选但过滤过大数字（身份证号/电话号等）和空匹配
     amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)', text)
     if amounts:
-        nums = [float(a.replace(',', '')) for a in amounts if float(a.replace(',', '')) > 10]
+        nums = []
+        for a in amounts:
+            a = a.replace(',', '').strip()
+            if not a:
+                continue
+            try:
+                val = float(a)
+                if 10 < val < 100000:  # 过滤过大数字（身份证/电话等）
+                    nums.append(val)
+            except ValueError:
+                continue
         if nums:
             return f"{max(nums):.2f}", "图片最大金额(降级)"
 
