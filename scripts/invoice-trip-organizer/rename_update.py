@@ -481,10 +481,8 @@ def migrate_directory_name(dry_run=False):
     else:
         print(f"   ℹ️  旧目录不存在，仅更新 config.py 路径")
 
-    # 更新 config.py 中的路径（替换所有旧名）
-    new_content = content
-    for old in OLD_NAMES:
-        new_content = new_content.replace(old, NEW_NAME)
+    # 更新 config.py 中的路径（只替换实际匹配到的旧名，避免链式替换导致 "01 01" 重复）
+    new_content = content.replace(matched_old, NEW_NAME)
     if new_content != content:
         try:
             with open(config_path, 'w', encoding='utf-8') as f:
