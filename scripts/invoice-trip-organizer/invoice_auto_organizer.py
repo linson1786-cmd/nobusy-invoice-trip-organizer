@@ -771,15 +771,17 @@ def extract_passenger_name(text, labels=None):
         labels = ['乘机人']
 
     # 1. 标签模式：乘机人/乘车人/入住人：xxx（禁止跨行匹配）
+    exclude_words = {'联系人', '乘客', '出行', '新增', '姓名', '选择', '请填写',
+                     '填写人', '购票', '登机', '信息', '明细', '遇同行', '出行人'}
     for label in labels:
         m = re.search(label + r'[：: \t]+([\u4e00-\u9fa5]{2,4})', text)
         if m:
-            return m.group(1).strip()
+            candidate = m.group(1).strip()
+            # 排除含排除词的错误匹配（如"联系人信息"被截断为"联系人信"）
+            if not any(w in candidate for w in exclude_words):
+                return candidate
 
     # 2. OTA 截图模式：身份证紧上方或附近的独立中文姓名
-    #    排除标题文字（联系人信息、联系人姓名、乘客信息等）
-    exclude_words = {'联系人', '乘客', '出行', '新增', '姓名', '选择', '请填写',
-                     '填写人', '购票', '登机', '信息', '明细'}
     lines = text.split('\n')
     for i, line in enumerate(lines):
         line = line.strip()
@@ -798,11 +800,13 @@ def extract_passenger_name(text, labels=None):
         if re.search(r'身份证|已选.*成人|邀同行|出行人| Passenger', context):
             return clean
 
-    # 3. 遇同行/出行人/乘客/入住人 标签后的姓名
+    # 3. 遇同行/出行人/乘客/入住人 标签后的姓名（禁止跨行匹配）
     for label in ['遇同行', '出行人', '乘客', '入住人'] + labels:
-        m = re.search(label + r'[：:\s]*([\u4e00-\u9fa5]{2,4})', text)
+        m = re.search(label + r'[：:\t]*([\u4e00-\u9fa5]{2,4})', text)
         if m:
-            return m.group(1).strip()
+            candidate = m.group(1).strip()
+            if not any(w in candidate for w in exclude_words):
+                return candidate
 
     return None
 
