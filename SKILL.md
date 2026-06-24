@@ -268,6 +268,8 @@ pip install pdfminer.six PyMuPDF fpdf2 Pillow pytesseract
 
 安装后验证：终端运行 `tesseract --version` 能显示版本号即成功。
 
+**⚠️ 中文语言包验证**：运行 `tesseract --list-langs`，确认列表中包含 `chi_sim`。如果没有，说明中文语言包未安装成功，OCR 中文图片会输出乱码。手动安装方法：从 https://github.com/tesseract-ocr/tessdata_fast/raw/main/chi_sim.traineddata 下载 `chi_sim.traineddata` 文件，放入 Tesseract 的 tessdata 目录（macOS: `/opt/homebrew/share/tessdata/`，Linux: `/usr/share/tesseract-ocr/4.00/tessdata/`，Windows: 安装目录下的 `tessdata/`）。
+
 ## 常见问题
 
 **Q: 不使用 Obsidian 可以用吗？**
