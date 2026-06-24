@@ -77,6 +77,8 @@ def load_accounts():
     if not os.path.exists(ACCOUNTS_FILE):
         return {"accounts": [], "last_used_id": None}
     try:
+        # 兼容旧文件：修正权限为仅所有者可读写
+        os.chmod(ACCOUNTS_FILE, 0o600)
         with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             data.setdefault("accounts", [])
@@ -90,6 +92,8 @@ def save_accounts(data):
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    # 凭据文件权限保护：仅所有者可读写
+    os.chmod(ACCOUNTS_FILE, 0o600)
 
 
 def add_account(acc):

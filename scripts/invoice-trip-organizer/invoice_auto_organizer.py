@@ -49,7 +49,7 @@ DONE_DIR = ""
 REVIEW_DIR = ""
 LOG_FILE = ""
 
-VALID_CATEGORIES = ["餐饮", "住宿", "机票", "机票比价图", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "油电类", "礼品", "结账单", "其他",
+VALID_CATEGORIES = ["餐饮", "住宿", "住宿比价图", "机票", "机票比价图", "高铁", "高铁比价图", "滴滴打车", "行程单", "高速费", "充电费", "油电类", "礼品", "结账单", "其他",
                     "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"]
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.heic', '.bmp', '.tiff', '.tif', '.webp']
 PROCESSABLE_EXTENSIONS = ['.pdf'] + IMAGE_EXTENSIONS
@@ -81,7 +81,7 @@ try:
         )
         print(f"✅ 已从 config.py 读取配置 ({len(_overridden)} 项，INPUT_DIR={INPUT_DIR})")
     else:
-        pass
+        print("⚠️ 未找到 config.py，请先运行：python3 setup.py init")
 except Exception as e:
     print(f"⚠️ 读取 config.py 失败: {e}")
 
@@ -156,6 +156,9 @@ if 'CATEGORY_RULES' not in dir():
     CATEGORY_RULES = [
         (["结账单", "水单"], "结账单"),
         (["行程单", "行程报销单", "出行记录", "出行行程"], "行程单"),
+        (["房型", "大床房", "双床房", "标准间", "豪华房", "亲子房",
+          "入住人", "连住", "每晚",
+          "住宿比价", "酒店比价"], "住宿比价图"),
         (["住宿", "酒店", "华住", "全季", "青之韵", "入住", "房费", "上海瓯江源", "离店"], "住宿"),
         (["蟹", "手信", "礼品", "新年", "淡水蟹", "淡水产品", "安琪",
           "日用杂品", "日用品", "日化用品", "礼盒", "水果", "玩具",
@@ -163,8 +166,14 @@ if 'CATEGORY_RULES' not in dir():
         (["高速", "通行费", "车辆通行", "路桥费", "收费站", "ETC", "高速费"], "高速费"),
         (["充电", "蔚来", "NIO", "换电", "充电桩", "充电费"], "充电费"),
         (["滴滴", "打车", "网约车", "交通运输服务", "客运服务费"], "滴滴打车"),
+        (["乘车人", "车次", "运行时间", "出发站", "到达站", "12306",
+          "抢票", "候补", "高铁比价", "火车票比价",
+          "预订成功", "预定成功", "订单详情"], "高铁比价图"),
         (["火车票", "高铁", "车票", "C3775", "二等座", "铁路", "电子客票", "一等座"], "高铁"),
-        (["直飞", "乘机人", "托运行李", "机场燃油", "机票比价"], "机票比价图"),
+        (["直飞", "乘机人", "托运行李", "机场燃油", "机票比价",
+          "飞猪", "携程", "Ctrip", "Trip.com", "去哪儿", "同程旅行",
+          "预订成功", "预定成功", "订单详情",
+          "出发城市", "到达城市", "起降时间", "航班动态"], "机票比价图"),
         (["机票", "航空", "航班", "登机牌", "CA ", "CZ ", "MU ", "HU ",
           "保险服务", "航意航延组合险标准计划", "经纪代理服务", "退票费"], "机票"),
         (["招待", "餐饮", "餐费", "就餐", "餐厅", "饭店", "酒家", "饮食", "菜品",
@@ -572,16 +581,20 @@ def extract_trip_date_for_gaotie(text):
 
 
 def extract_date_for_flight_comparison(text):
-    """机票比价图专用：从"直飞"后提取航班日期
+    """机票比价图/预订截图专用：提取航班日期
 
     识别格式：
     1. "直飞 06-15" / "直飞 06/15" (月-日)
     2. "直飞 2026-06-15" / "直飞 2026/06/15" (完整日期)
     3. "直飞 06月15日" (中文格式)
     4. "直飞\n06-15" (OCR换行)
+    5. "出发日期: 2026-06-15" / "起飞时间 06-15" (预订截图)
+    6. "乘机日期 06月15日" / "航班日期 2026-06-15"
 
     返回: (date_str, source_str) 或 (None, "无航班日期")
     """
+    _year = datetime.now().year  # 无年份时以当前年份为准
+
     # 1. 直飞 + 完整日期 (2026-06-15 / 2026/06/15)
     m = re.search(r'直飞[\s\n]*(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
     if m:
@@ -594,14 +607,14 @@ def extract_date_for_flight_comparison(text):
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"2026-{mo:02d}-{d:02d}", "直飞月日"
+            return f"{_year}-{mo:02d}-{d:02d}", "直飞月日"
 
     # 3. 直飞 + 中文格式 (06月15日)
     m = re.search(r'直飞[\s\n]*(\d{1,2})月(\d{1,2})日', text)
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"2026-{mo:02d}-{d:02d}", "直飞中文日期"
+            return f"{_year}-{mo:02d}-{d:02d}", "直飞中文日期"
 
     # 4. 直飞后任意位置有日期（放宽搜索范围）
     m = re.search(r'直飞[\s\S]{0,30}?(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
@@ -613,7 +626,48 @@ def extract_date_for_flight_comparison(text):
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"2026-{mo:02d}-{d:02d}", "直飞附近月日"
+            return f"{_year}-{mo:02d}-{d:02d}", "直飞附近月日"
+
+    # 5. 预订截图格式：出发日期/起飞时间/乘机日期/航班日期 + 完整日期
+    for label in ['出发日期', '起飞时间', '乘机日期', '航班日期', '出发时间', '行程日期']:
+        m = re.search(label + r'[\s：:]*(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
+        if m:
+            y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+                return f"{y}-{mo:02d}-{d:02d}", f"{label}完整日期"
+
+    # 6. 预订截图格式：出发日期/起飞时间/乘机日期/航班日期 + 月-日
+    for label in ['出发日期', '起飞时间', '乘机日期', '航班日期', '出发时间', '行程日期']:
+        m = re.search(label + r'[\s：:]*(\d{1,2})[月\-/.](\d{1,2})', text)
+        if m:
+            mo, d = int(m.group(1)), int(m.group(2))
+            if 1 <= mo <= 12 and 1 <= d <= 31:
+                return f"{_year}-{mo:02d}-{d:02d}", f"{label}月日"
+
+    # 7. OTA截图裸日期：无标签前缀，但日期附近有路线/航班信息
+    #    例: "01-04 周日 广州-上海  2小时20分钟"（去哪儿/飞猪/携程等预订页）
+    #    先试完整日期 YYYY-MM-DD
+    m = re.search(
+        r'(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})'
+        r'[\s\S]{0,40}'
+        r'(?:[\u4e00-\u9fa5]{2,}[-—→]+[\u4e00-\u9fa5]{2,}|飞行|小时)',
+        text)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{y}-{mo:02d}-{d:02d}", "OTA裸完整日期+路线"
+    # 再试月-日格式 MM-DD（行首/换行后的独立日期，后面跟路线或航班时长）
+    m = re.search(
+        r'(?:^|\n\s*)'
+        r'(\d{1,2})[月\-/.](\d{1,2})'
+        r'(?:\s+[\u4e00-\u9fa5]*)?'  # 可选中文（如"周日""AB"误读）
+        r'[\s\S]{0,30}'
+        r'(?:[\u4e00-\u9fa5]{2,}[-—→]+[\u4e00-\u9fa5]{2,}|飞行|小时)',
+        text)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{_year}-{mo:02d}-{d:02d}", "OTA裸月日+路线"
 
     return None, "无航班日期"
 
@@ -656,10 +710,21 @@ def extract_amount_for_flight_comparison(text):
         if 0 < val < 10000:
             return f"{val:.2f}", "燃油附近金额"
 
-    # 5. 降级：图片中所有金额取最大（机票总价）
-    amounts = re.findall(r'[¥￥]?\s*([\d,]+\.\d{2})', text)
+    # 5. 降级：图片中所有金额取最大（机票总价）— 支持整数和小数
+    # ¥可选但过滤过大数字（身份证号/电话号等）和空匹配
+    amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)', text)
     if amounts:
-        nums = [float(a.replace(',', '')) for a in amounts if float(a.replace(',', '')) > 10]
+        nums = []
+        for a in amounts:
+            a = a.replace(',', '').strip()
+            if not a:
+                continue
+            try:
+                val = float(a)
+                if 10 < val < 100000:  # 过滤过大数字（身份证/电话等）
+                    nums.append(val)
+            except ValueError:
+                continue
         if nums:
             return f"{max(nums):.2f}", "图片最大金额(降级)"
 
@@ -688,15 +753,254 @@ def extract_route_for_flight_comparison(text):
     return None
 
 
-def extract_passenger_name(text):
-    """机票比价图专用：提取乘机人姓名
+def extract_passenger_name(text, labels=None):
+    """比价图专用：提取乘机人/乘车人/入住人姓名
 
-    识别格式：乘机人：张三 / 乘机人 张三 / 乘机人:张三
+    识别格式：
+    1. 乘机人/乘车人/入住人：张三 / 乘机人 张三 / 乘机人:张三（带标签）
+    2. 身份证上方的独立中文姓名（去哪儿/飞猪/携程 OTA 截图）
+       - 姓名通常在「已选/X成人」和「身份证」之间独占一行
+    3. 遇同行 / 出行人 / 乘客 / 入住人 等标签后的姓名
+
+    labels: 标签列表，默认 ['乘机人']
+    - 机票比价图: ['乘机人']（默认）
+    - 高铁比价图: ['乘车人']
+    - 住宿比价图: ['入住人']
     """
-    m = re.search(r'乘机人[：:\s]+([\u4e00-\u9fa5]{2,4})', text)
-    if m:
-        return m.group(1).strip()
+    if labels is None:
+        labels = ['乘机人']
+
+    # 1. 标签模式：乘机人/乘车人/入住人：xxx（禁止跨行匹配）
+    for label in labels:
+        m = re.search(label + r'[：: \t]+([\u4e00-\u9fa5]{2,4})', text)
+        if m:
+            return m.group(1).strip()
+
+    # 2. OTA 截图模式：身份证紧上方或附近的独立中文姓名
+    #    排除标题文字（联系人信息、联系人姓名、乘客信息等）
+    exclude_words = {'联系人', '乘客', '出行', '新增', '姓名', '选择', '请填写',
+                     '填写人', '购票', '登机', '信息', '明细'}
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        line = line.strip()
+        # 跳过空行、太长、太短、含数字的行
+        if not line or len(line) > 6 or len(line) < 2:
+            continue
+        # 必须纯汉字（允许末尾标点）
+        clean = line.rstrip('，。、：；')
+        if not re.match(r'^[\u4e00-\u9fa5]{2,4}$', clean):
+            continue
+        # 排除标题词
+        if any(w in clean for w in exclude_words):
+            continue
+        # 检查上下文：附近有 身份证 / 已选 / 成人 / 邀同行
+        context = '\n'.join(lines[max(0,i-2):min(len(lines),i+3)])
+        if re.search(r'身份证|已选.*成人|邀同行|出行人| Passenger', context):
+            return clean
+
+    # 3. 遇同行/出行人/乘客/入住人 标签后的姓名
+    for label in ['遇同行', '出行人', '乘客', '入住人'] + labels:
+        m = re.search(label + r'[：:\s]*([\u4e00-\u9fa5]{2,4})', text)
+        if m:
+            return m.group(1).strip()
+
     return None
+
+
+def extract_date_for_train_comparison(text):
+    """高铁比价图/预订截图专用：提取乘车日期
+
+    识别格式：
+    1. "乘车日期: 2026-06-15" / "乘车日期 06-15" (带标签)
+    2. "出发日期: 2026-06-15" / "出发日期 06-15" (带标签)
+    3. OTA 截图裸日期：行首/换行后 MM-DD，附近有车次/运行时间/出发站
+
+    返回: (date_str, source_str) 或 (None, "无乘车日期")
+    """
+    _year = datetime.now().year
+
+    # 1. 乘车日期/出发日期 + 完整日期
+    for label in ['乘车日期', '出发日期', '行程日期', '发车日期', '出发时间']:
+        m = re.search(label + r'[\s：:]*(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
+        if m:
+            y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+                return f"{y}-{mo:02d}-{d:02d}", f"{label}完整日期"
+
+    # 2. 乘车日期/出发日期 + 月-日
+    for label in ['乘车日期', '出发日期', '行程日期', '发车日期', '出发时间']:
+        m = re.search(label + r'[\s：:]*(\d{1,2})[月\-/.](\d{1,2})', text)
+        if m:
+            mo, d = int(m.group(1)), int(m.group(2))
+            if 1 <= mo <= 12 and 1 <= d <= 31:
+                return f"{_year}-{mo:02d}-{d:02d}", f"{label}月日"
+
+    # 3. OTA 截图裸日期：无标签前缀，但日期附近有车次/运行时间/出发站
+    #    先试完整日期 YYYY-MM-DD
+    m = re.search(
+        r'(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})'
+        r'[\s\S]{0,40}'
+        r'(?:[GC]\d{1,4}|运行时间|出发站|到达站|小时|分钟)',
+        text)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{y}-{mo:02d}-{d:02d}", "OTA裸完整日期+车次"
+    # 再试月-日格式 MM-DD
+    m = re.search(
+        r'(?:^|\n\s*)'
+        r'(\d{1,2})[月\-/.](\d{1,2})'
+        r'(?:\s+[\u4e00-\u9fa5]*)?'
+        r'[\s\S]{0,30}'
+        r'(?:[GC]\d{1,4}|运行时间|出发站|到达站|小时|分钟)',
+        text)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{_year}-{mo:02d}-{d:02d}", "OTA裸月日+车次"
+
+    return None, "无乘车日期"
+
+
+def extract_amount_for_train_comparison(text):
+    """高铁比价图专用：提取票价金额
+
+    识别格式：
+    1. "票价 ¥553.00" / "总价 ¥553" (带标签)
+    2. "二等座 ¥553" / "一等座 ¥928" / "商务座 ¥1748" (座位等级)
+    3. 降级：图片中所有金额取最大
+    """
+    # 1. 票价/总价 + ¥金额
+    for label in ['票价', '总价', '总额', '订单金额', '实付']:
+        m = re.search(label + r'[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+        if m:
+            val = float(m.group(1).replace(',', ''))
+            if 0 < val < 10000:
+                return f"{val:.2f}", label
+
+    # 2. 座位等级 + ¥金额
+    for seat in ['商务座', '一等座', '二等座', '无座', '硬座', '软座', '硬卧', '软卧']:
+        m = re.search(seat + r'[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+        if m:
+            val = float(m.group(1).replace(',', ''))
+            if 0 < val < 10000:
+                return f"{val:.2f}", seat
+
+    # 3. 降级：图片中所有金额取最大
+    amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)', text)
+    if amounts:
+        nums = []
+        for a in amounts:
+            a = a.replace(',', '').strip()
+            if not a:
+                continue
+            try:
+                val = float(a)
+                if 10 < val < 100000:
+                    nums.append(val)
+            except ValueError:
+                continue
+        if nums:
+            return f"{max(nums):.2f}", "图片最大金额(降级)"
+
+    return None, "无法提取金额"
+
+
+def extract_date_for_hotel_comparison(text):
+    """住宿比价图/预订截图专用：提取入住日期
+
+    识别格式：
+    1. "入住日期: 2026-06-15" / "入住日期 06-15" (带标签)
+    2. "入住 2026-06-15" / "入住 06-15" (简写标签)
+    3. OTA 截图裸日期：行首/换行后 MM-DD，附近有酒店/每晚/连住
+
+    返回: (date_str, source_str) 或 (None, "无入住日期")
+    """
+    _year = datetime.now().year
+
+    # 1. 入住日期/入住 + 完整日期
+    for label in ['入住日期', '入住时间', '入住']:
+        m = re.search(label + r'[\s：:]*(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
+        if m:
+            y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+                return f"{y}-{mo:02d}-{d:02d}", f"{label}完整日期"
+
+    # 2. 入住日期/入住 + 月-日
+    for label in ['入住日期', '入住时间', '入住']:
+        m = re.search(label + r'[\s：:]*(\d{1,2})[月\-/.](\d{1,2})', text)
+        if m:
+            mo, d = int(m.group(1)), int(m.group(2))
+            if 1 <= mo <= 12 and 1 <= d <= 31:
+                return f"{_year}-{mo:02d}-{d:02d}", f"{label}月日"
+
+    # 3. OTA 截图裸日期：无标签前缀，但日期附近有酒店/每晚/连住/房型
+    m = re.search(
+        r'(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})'
+        r'[\s\S]{0,40}'
+        r'(?:酒店|民宿|公寓|每晚|连住|房型|大床房|双床房|标准间|入住|离店)',
+        text)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{y}-{mo:02d}-{d:02d}", "OTA裸完整日期+酒店"
+    m = re.search(
+        r'(?:^|\n\s*)'
+        r'(\d{1,2})[月\-/.](\d{1,2})'
+        r'(?:\s+[\u4e00-\u9fa5]*)?'
+        r'[\s\S]{0,30}'
+        r'(?:酒店|民宿|公寓|每晚|连住|房型|大床房|双床房|标准间|入住|离店)',
+        text)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{_year}-{mo:02d}-{d:02d}", "OTA裸月日+酒店"
+
+    return None, "无入住日期"
+
+
+def extract_amount_for_hotel_comparison(text):
+    """住宿比价图专用：提取房价金额
+
+    识别格式：
+    1. "总价 ¥1286.00" / "总额 ¥1286" / "订单金额 ¥1286" (带标签)
+    2. "每晚 ¥429" / "房费 ¥1286" (单价/房费)
+    3. 降级：图片中所有金额取最大
+    """
+    # 1. 总价/总额/订单金额/实付 + ¥金额
+    for label in ['总价', '总额', '订单金额', '实付', '付款金额', '合计']:
+        m = re.search(label + r'[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+        if m:
+            val = float(m.group(1).replace(',', ''))
+            if 0 < val < 100000:
+                return f"{val:.2f}", label
+
+    # 2. 每晚/房费 + ¥金额
+    for label in ['每晚', '房费', '均价', '日均价']:
+        m = re.search(label + r'[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+        if m:
+            val = float(m.group(1).replace(',', ''))
+            if 0 < val < 10000:
+                return f"{val:.2f}", label
+
+    # 3. 降级：图片中所有金额取最大
+    amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)', text)
+    if amounts:
+        nums = []
+        for a in amounts:
+            a = a.replace(',', '').strip()
+            if not a:
+                continue
+            try:
+                val = float(a)
+                if 10 < val < 100000:
+                    nums.append(val)
+            except ValueError:
+                continue
+        if nums:
+            return f"{max(nums):.2f}", "图片最大金额(降级)"
+
+    return None, "无法提取金额"
 
 
 def extract_invoice_number(text):
@@ -1154,51 +1458,63 @@ def extract_route(text, cat):
         return extract_route_for_flight_comparison(text)
     elif base_cat == "高铁":
         return extract_route_for_gaotie(text, cat)
+    elif base_cat == "高铁比价图":
+        return extract_route_for_gaotie(text, cat)
     elif base_cat == "住宿":
+        return extract_lodging_city(text)
+    elif base_cat == "住宿比价图":
         return extract_lodging_city(text)
     return None
 
 
 def extract_amount_from_text(text):
+    # 金额正则：兼容 ¥1129.00（小数）和 ¥1129（整数）两种格式
+    _amt = r'([\d,]+(?:\.\d{1,2})?)'
     # 策略1: 价税合计 + ¥
     for m in re.finditer(r'价税合计[\s\S]{0,200}', text):
         seg = m.group(0)
-        amts = re.findall(r'[¥￥]\s*([\d,]+\.\d{2})', seg)
+        amts = re.findall(r'[¥￥]\s*' + _amt, seg)
         if amts:
             return max(float(a.replace(',','')) for a in amts).__format__('.2f')
     # 策略2: 小写金额（¥在后面，如"（ 小 写 ） 177.90 ¥"）
-    m = re.search(r'[\(（]\s*小写\s*[)）]\s*([\d,]+\.\d{2})', text)
+    m = re.search(r'[\(（]\s*小写\s*[)）]\s*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
     # 策略3: 大写+¥小写
-    m = re.search(r'[零壹贰叁肆伍陆柒捌玖拾佰仟万亿圆元整]{2,}[\s]*[¥￥]\s*([\d,]+\.\d{2})', text)
+    m = re.search(r'[零壹贰叁肆伍陆柒捌玖拾佰仟万亿圆元整]{2,}[\s]*[¥￥]\s*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
     # 策略4: (小写)¥
-    m = re.search(r'[\(（]小写[\)）][\s\S]{0,30}[¥￥]\s*([\d,]+\.\d{2})', text)
+    m = re.search(r'[\(（]小写[\)）][\s\S]{0,30}[¥￥]\s*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
-    # 策略5: ¥金额取最大
-    amounts = re.findall(r'[¥￥]\s*([\d,]+\.\d{2})', text)
+    # 策略5: ¥金额取最大（支持整数和小数）
+    amounts = re.findall(r'[¥￥]\s*' + _amt, text)
     if amounts:
         nums = [float(a.replace(',', '')) for a in amounts]
         return f"{max(nums):.2f}"
+    # 策略5b: 总价/订单金额/票价 + 整数或小数（预订截图等非发票文件）
+    m = re.search(r'(?:总价|订单金额|票价|总金额|合计金额|实付)[：:\s]*[¥￥]?\s*' + _amt, text)
+    if m:
+        val = float(m.group(1).replace(',', ''))
+        if val > 0:
+            return f"{val:.2f}"
     # 策略6: 消费合计（结账单，多行分隔）
-    m = re.search(r'消费合计[\s\n]*([\d,]+\.\d{2})', text)
+    m = re.search(r'消费合计[\s\n]*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
     # 策略7: 合计X元（行程单）
-    m = re.search(r'合计([\d,]+\.\d{2})元', text)
+    m = re.search(r'合计' + _amt + r'元', text)
     if m:
         return m.group(1).replace(',', '')
     # 策略8: 金额（元）/ 交易金额(元) 格式（高速费通行费等）
-    m = re.search(r'金额[（(]元[）)][：:\s]*([\d,]+\.\d{2})', text)
+    m = re.search(r'金额[（(]元[）)][：:\s]*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
-    m = re.search(r'交易金额[（(]元[）)][：:\s]*([\d,]+\.\d{2})', text)
+    m = re.search(r'交易金额[（(]元[）)][：:\s]*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
-    # 策略9: 所有数字金额取最大（>10，避免提取序号等）
+    # 策略9: 所有数字金额取最大（>10，避免提取序号等）— 仅小数，防止整数误匹配
     amts = re.findall(r'([\d,]+\.\d{2})', text)
     if amts:
         nums = [float(a.replace(',', '')) for a in amts if float(a.replace(',', '')) > 10]
@@ -1208,6 +1524,7 @@ def extract_amount_from_text(text):
 
 
 def extract_date_from_filename(filename):
+    _year = datetime.now().year  # 无年份时以当前年份为准
     m = re.search(r'(\d{4})(\d{2})(\d{2})\d{6}', filename)
     if m:
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -1220,7 +1537,7 @@ def extract_date_from_filename(filename):
             return f"{y}-{mo:02d}-{d:02d}"
     m = re.search(r'水单(\d{2})(\d{2})', filename)
     if m:
-        return f"2026-{m.group(1)}-{m.group(2)}"
+        return f"{_year}-{m.group(1)}-{m.group(2)}"
     m = re.search(r'结账单(\d{4})(\d{2})(\d{2})', filename)
     if m:
         return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
@@ -1228,13 +1545,13 @@ def extract_date_from_filename(filename):
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"2026-{mo:02d}-{d:02d}"
+            return f"{_year}-{mo:02d}-{d:02d}"
     m = re.search(r'(\d{1,2})月(\d{1,2})[日号]', filename)
     if m:
-        return f"2026-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+        return f"{_year}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
     m = re.search(r'(\d{1,2})月', filename)
     if m:
-        return f"2026-{m.group(1).zfill(2)}-01"
+        return f"{_year}-{m.group(1).zfill(2)}-01"
     return None
 
 
@@ -1542,12 +1859,13 @@ def save_log(log):
 
 def process_inbox():
     """处理 01 待分类/ 中的新文件
-    
+
     流程:
     1. OFD预处理: 同发票号有PDF→删OFD; 无PDF→提取OFD数据→转PDF→归档
     2. XML预处理: 同发票号有PDF→删XML; 无PDF→提取XML数据→转PDF→归档
     3. PDF处理: 提取日期/金额/类别→归档到03已完成或移到02待核实
     """
+    global OCR_AVAILABLE
     if not os.path.isdir(INPUT_DIR):
         return [], [], 0, []
 
@@ -1562,17 +1880,42 @@ def process_inbox():
     print(f"📥 阶段1: 处理 01 待分类/ ({len(files)} 个文件)")
     print(f"{'='*60}")
 
-    # OCR 依赖检查：如果有图片文件但 Tesseract 未安装，提前提示
+    # OCR 依赖检查：如果有图片文件但 Tesseract 未安装，尝试自动安装
     if not OCR_AVAILABLE:
         image_files = [f for f in files if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS]
         if image_files:
-            print(f"\n{'⚠️'*3} OCR 引擎未安装！{len(image_files)} 个图片文件将无法识别，全部移至 02 待核实/")
-            print(f"   安装 Tesseract OCR 引擎：")
-            print(f"   macOS:   brew install tesseract tesseract-lang")
-            print(f"   Ubuntu:  sudo apt install tesseract-ocr tesseract-ocr-chi-sim")
-            print(f"   Windows: 下载 https://github.com/UB-Mannheim/tesseract/wiki 安装")
-            print(f"   然后确保 Python 依赖已安装: pip install pytesseract Pillow")
-            print(f"   安装完成后重新运行文件识别即可\n")
+            print(f"\n{'⚠️'*3} OCR 引擎未安装！{len(image_files)} 个图片文件将无法识别")
+            print(f"   正在尝试自动安装 Tesseract OCR...\n")
+            # 尝试自动安装
+            try:
+                setup_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'setup.py')
+                if os.path.exists(setup_path):
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location("_setup_ocr", setup_path)
+                    setup_mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(setup_mod)
+                    ocr_ok, ocr_msg = setup_mod.check_and_install_tesseract(auto_install=True)
+                    if ocr_ok:
+                        # 安装成功，重新检测
+                        try:
+                            import pytesseract
+                            pytesseract.get_tesseract_version()
+                            OCR_AVAILABLE = True
+                            print(f"   ✅ Tesseract OCR 安装成功！图片文件将正常识别\n")
+                        except Exception:
+                            print(f"   ⚠️  安装成功但需重启终端，本次图片仍移至 02 待核实/\n")
+                    else:
+                        print(f"   ❌ 自动安装失败: {ocr_msg}\n")
+                        print(f"   安装完成后重新运行文件识别即可\n")
+                else:
+                    print(f"   setup.py 不存在，请手动安装 Tesseract OCR:")
+                    print(f"   macOS:   brew install tesseract tesseract-lang")
+                    print(f"   Ubuntu:  sudo apt install tesseract-ocr tesseract-ocr-chi-sim")
+                    print(f"   Windows: 下载 https://github.com/UB-Mannheim/tesseract/wiki 安装")
+                    print(f"   然后确保 Python 依赖已安装: pip install pytesseract Pillow\n")
+            except Exception as e:
+                print(f"   ❌ 自动安装异常: {e}")
+                print(f"   请手动安装: macOS brew install tesseract tesseract-lang\n")
 
     success = []
     review = []
@@ -1819,6 +2162,34 @@ def process_inbox():
                 if passenger:
                     print(f"      ✈️ 乘机人={passenger}")
 
+            # 高铁比价图类：提取乘车日期和票价
+            if cat == "高铁比价图":
+                train_date, train_source = extract_date_for_train_comparison(text)
+                if train_date:
+                    date = train_date
+                    print(f"      🚄 高铁比价图乘车日期={train_date} (来源={train_source})")
+                train_amount, train_source = extract_amount_for_train_comparison(text)
+                if train_amount:
+                    amount = train_amount
+                    print(f"      🚄 高铁比价图票价={train_amount} (来源={train_source})")
+                passenger = extract_passenger_name(text, ['乘车人'])
+                if passenger:
+                    print(f"      🚄 乘车人={passenger}")
+
+            # 住宿比价图类：提取入住日期和房价
+            if cat == "住宿比价图":
+                hotel_date, hotel_source = extract_date_for_hotel_comparison(text)
+                if hotel_date:
+                    date = hotel_date
+                    print(f"      🏨 住宿比价图入住日期={hotel_date} (来源={hotel_source})")
+                hotel_amount, hotel_source = extract_amount_for_hotel_comparison(text)
+                if hotel_amount:
+                    amount = hotel_amount
+                    print(f"      🏨 住宿比价图房价={hotel_amount} (来源={hotel_source})")
+                passenger = extract_passenger_name(text, ['入住人'])
+                if passenger:
+                    print(f"      🏨 入住人={passenger}")
+
             if not date:
                 move_to_review(src, f, "OFD无法提取日期")
                 continue
@@ -1880,8 +2251,15 @@ def process_inbox():
             # v3.22: 序号放在末尾(状态后缀之后)
             # v3.30: 增加购买方公司简称
             # v3.40: 机票比价图使用乘机人姓名代替购买方
+            # v1.0.28: 高铁比价图/住宿比价图同理
             if cat == "机票比价图":
                 passenger = extract_passenger_name(text)
+                buyer_short = passenger if passenger else ""
+            elif cat == "高铁比价图":
+                passenger = extract_passenger_name(text, ['乘车人'])
+                buyer_short = passenger if passenger else ""
+            elif cat == "住宿比价图":
+                passenger = extract_passenger_name(text, ['入住人'])
                 buyer_short = passenger if passenger else ""
             else:
                 buyer_name = extract_buyer_name_from_text(text)
@@ -2354,7 +2732,43 @@ def process_inbox():
             if passenger:
                 print(f"   ✈️ 乘机人={passenger}")
 
-        # 机票类/高铁类/机票比价图类提取出发地-到达地 (SOP v3.10)
+        # 高铁比价图类：提取乘车日期和票价
+        if cat == "高铁比价图":
+            train_date, train_source = extract_date_for_train_comparison(text)
+            if train_date:
+                date = train_date
+                print(f"   🚄 高铁比价图乘车日期={train_date} (来源={train_source})")
+            else:
+                print(f"   🚄 无乘车日期，使用提取日期={date}")
+            train_amount, train_amt_source = extract_amount_for_train_comparison(text)
+            if train_amount:
+                amount = train_amount
+                print(f"   🚄 高铁比价图票价={train_amount} (来源={train_amt_source})")
+            else:
+                print(f"   ⚠️ 无法提取高铁票价")
+            passenger = extract_passenger_name(text, ['乘车人'])
+            if passenger:
+                print(f"   🚄 乘车人={passenger}")
+
+        # 住宿比价图类：提取入住日期和房价
+        if cat == "住宿比价图":
+            hotel_date, hotel_source = extract_date_for_hotel_comparison(text)
+            if hotel_date:
+                date = hotel_date
+                print(f"   🏨 住宿比价图入住日期={hotel_date} (来源={hotel_source})")
+            else:
+                print(f"   🏨 无入住日期，使用提取日期={date}")
+            hotel_amount, hotel_amt_source = extract_amount_for_hotel_comparison(text)
+            if hotel_amount:
+                amount = hotel_amount
+                print(f"   🏨 住宿比价图房价={hotel_amount} (来源={hotel_amt_source})")
+            else:
+                print(f"   ⚠️ 无法提取房价")
+            passenger = extract_passenger_name(text, ['入住人'])
+            if passenger:
+                print(f"   🏨 入住人={passenger}")
+
+        # 机票类/高铁类/比价图类提取出发地-到达地 (SOP v3.10)
         route = extract_route(text, cat_label)
 
         if not date:
@@ -2365,8 +2779,8 @@ def process_inbox():
             continue
 
         # 发票内容校验：非发票 PDF（无发票特征词）移入待核实
-        # 机票比价图是截图不是发票，跳过此检查
-        if cat != "机票比价图" and not has_invoice_markers(text):
+        # 机票比价图/高铁比价图/住宿比价图是截图不是发票，跳过此检查
+        if cat not in ("机票比价图", "高铁比价图", "住宿比价图") and not has_invoice_markers(text):
             move_to_review(src, f, "非发票内容(无发票特征词)")
             continue
         try:
@@ -2395,8 +2809,15 @@ def process_inbox():
         # v3.22: 序号放在末尾(状态后缀之后)
         # v3.30: 增加购买方公司简称
         # v3.40: 机票比价图使用乘机人姓名代替购买方
+        # v1.0.28: 高铁比价图/住宿比价图同理
         if cat == "机票比价图":
             passenger = extract_passenger_name(text)
+            buyer_short = passenger if passenger else ""
+        elif cat == "高铁比价图":
+            passenger = extract_passenger_name(text, ['乘车人'])
+            buyer_short = passenger if passenger else ""
+        elif cat == "住宿比价图":
+            passenger = extract_passenger_name(text, ['入住人'])
             buyer_short = passenger if passenger else ""
         else:
             buyer_name = extract_buyer_name_from_text(text)
@@ -2688,8 +3109,8 @@ def link_to_trips(success_list):
         cat_to_subdir = CAT_TO_SUBDIR
     else:
         cat_to_subdir = {
-            "机票": "机票高铁", "机票(保险)": "机票高铁", "高铁": "机票高铁",
-            "住宿": "住宿", "住宿(结账单)": "住宿",
+            "机票": "机票高铁", "机票(保险)": "机票高铁", "机票比价图": "机票高铁", "高铁": "机票高铁", "高铁比价图": "机票高铁",
+            "住宿": "住宿", "住宿(结账单)": "住宿", "住宿比价图": "住宿",
             "餐饮": "餐饮",
             "滴滴打车": "打车", "滴滴打车(行程单)": "打车",
             "礼品": "礼品",
@@ -2759,10 +3180,10 @@ def _update_trip_invoice_lists(trips):
     """更新行程的发票文件清单.md"""
     # 从 config 读取配置 (可被 config.py 覆盖)
     non_reimburse = globals().get('NON_REIMBURSE',
-        ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单"])
+        ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单", "机票比价图", "高铁比价图", "住宿比价图"])
     cat_to_subdir = globals().get('CAT_TO_SUBDIR', {
-        "机票": "机票高铁", "机票(保险)": "机票高铁", "高铁": "机票高铁",
-        "住宿": "住宿", "住宿(结账单)": "住宿",
+        "机票": "机票高铁", "机票(保险)": "机票高铁", "机票比价图": "机票高铁", "高铁": "机票高铁", "高铁比价图": "机票高铁",
+        "住宿": "住宿", "住宿(结账单)": "住宿", "住宿比价图": "住宿",
         "餐饮": "餐饮",
         "滴滴打车": "打车", "滴滴打车(行程单)": "打车",
         "礼品": "礼品",
@@ -2852,8 +3273,8 @@ def _update_trip_invoice_lists(trips):
 
 def _gen_master_ledger(all_records, stage_data):
     """生成个人行程与报销总台账（合并三阶段+行程统计）"""
-    NON_REIMBURSE = ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单"]
-    CAT_ORDER = ["机票", "机票(保险)", "高铁", "住宿", "住宿(结账单)", "餐饮",
+    NON_REIMBURSE = ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单", "机票比价图", "高铁比价图", "住宿比价图"]
+    CAT_ORDER = ["机票", "机票(保险)", "机票比价图", "高铁", "高铁比价图", "住宿", "住宿比价图", "住宿(结账单)", "餐饮",
                  "滴滴打车", "滴滴打车(行程单)", "礼品", "高速费", "高速费(行程单)",
                  "充电费", "其他", "结账单", "行程单", "未分类"]
 
@@ -3063,7 +3484,7 @@ def update_ledgers():
     """扫描03已完成目录，生成台账MD文件。01/02日志由main()追加流水记录。"""
     # 从 config 读取 (可被 config.py 覆盖)
     non_reimburse = globals().get('NON_REIMBURSE',
-        ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单"])
+        ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单", "机票比价图", "高铁比价图", "住宿比价图"])
 
     def parse_filename(fname):
         m = STANDARD_NAME_RE.match(fname)

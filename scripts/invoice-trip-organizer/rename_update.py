@@ -405,12 +405,15 @@ def migrate_directory_name(dry_run=False):
       - "01 发票整理" → "01 文件识别整理"
       - "文件识别整理" → "01 文件识别整理"
 
-    1. 读取 config.py 中的 INVOICE_BASE_REL 和 BASE_ROOT
-    2. 如果路径包含旧名，重命名物理目录
-    3. 更新 config.py 中的路径
+    1. 读取 config.py，检测是否包含旧目录名
+    2. 动态加载 config 模块获取实际 BASE_ROOT（兼容 os.path.join 和硬编码两种格式）
+    3. 重命名物理目录
+    4. 更新 config.py 中的路径文本
 
     返回: (changed: bool, message: str)
     """
+    import importlib.util
+
     config_path = os.path.join(SCRIPT_DIR, 'config.py')
     if not os.path.exists(config_path):
         return False, "config.py 不存在"
@@ -435,12 +438,26 @@ def migrate_directory_name(dry_run=False):
     if not matched_old:
         return False, "无需迁移（路径已是新名称）"
 
-    # 提取 BASE_ROOT 的值
-    m = re.search(r'^BASE_ROOT\s*=\s*"([^"]*)"', content, re.MULTILINE)
-    if not m:
-        return False, "无法从 config.py 提取 BASE_ROOT"
+    # 动态加载 config 模块获取实际计算路径
+    # 兼容两种 config 格式：os.path.join() 计算式 和 硬编码字符串
+    old_base_root = ""
+    try:
+        spec = importlib.util.spec_from_file_location("_cfg_mig", config_path)
+        cfg = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cfg)
+        old_base_root = getattr(cfg, 'BASE_ROOT', '')
+    except Exception:
+        pass
 
-    old_base_root = m.group(1)
+    # fallback: 尝试从文本提取（兼容旧版硬编码格式）
+    if not old_base_root:
+        m = re.search(r'^BASE_ROOT\s*=\s*"([^"]*)"', content, re.MULTILINE)
+        if m:
+            old_base_root = m.group(1)
+
+    if not old_base_root:
+        return False, "无法从 config.py 获取 BASE_ROOT（动态加载和正则提取均失败）"
+
     new_base_root = old_base_root.replace(matched_old, NEW_NAME)
 
     # 检查物理目录是否存在
@@ -449,8 +466,8 @@ def migrate_directory_name(dry_run=False):
 
     if dry_run:
         if os.path.exists(old_dir):
-            return True, f"[预览] 将重命名目录: {matched_old} → {NEW_NAME}"
-        return False, "物理目录不存在，仅更新 config.py"
+            return True, f"[预览] 将重命名目录: {matched_old} → {NEW_NAME}\n   旧路径: {old_dir}\n   新路径: {new_dir}"
+        return True, f"[预览] 物理目录不存在，仅更新 config.py: {matched_old} → {NEW_NAME}"
 
     # 重命名物理目录
     if os.path.exists(old_dir) and not os.path.exists(new_dir):
@@ -464,10 +481,8 @@ def migrate_directory_name(dry_run=False):
     else:
         print(f"   ℹ️  旧目录不存在，仅更新 config.py 路径")
 
-    # 更新 config.py 中的路径（替换所有旧名）
-    new_content = content
-    for old in OLD_NAMES:
-        new_content = new_content.replace(old, NEW_NAME)
+    # 更新 config.py 中的路径（只替换实际匹配到的旧名，避免链式替换导致 "01 01" 重复）
+    new_content = content.replace(matched_old, NEW_NAME)
     if new_content != content:
         try:
             with open(config_path, 'w', encoding='utf-8') as f:

@@ -1,7 +1,7 @@
 ---
 name: invoice-trip-organizer
-description: 个人行程与报销 V1.0.20 | 配置化版本，支持分享与在线升级
-version: 1.0.20
+description: 个人行程与报销 V1.0.28 | 配置化版本，支持分享与在线升级
+version: 1.0.28
 trigger: ["文件识别", "行程整理", "导入", "导入文件", "新增行程", "初始化", "初始化设置", "重置", "下载发票", "收发票", "升级", "检查更新", "刷新"]
 ---
 
@@ -267,6 +267,8 @@ pip install pdfminer.six PyMuPDF fpdf2 Pillow pytesseract
 | Windows | [下载安装包](https://github.com/UB-Mannheim/tesseract/wiki) | 安装时勾选 Chinese (Simplified) |
 
 安装后验证：终端运行 `tesseract --version` 能显示版本号即成功。
+
+**⚠️ 中文语言包验证**：运行 `tesseract --list-langs`，确认列表中包含 `chi_sim`。如果没有，说明中文语言包未安装成功，OCR 中文图片会输出乱码。手动安装方法：从 https://github.com/tesseract-ocr/tessdata_fast/raw/main/chi_sim.traineddata 下载 `chi_sim.traineddata` 文件，放入 Tesseract 的 tessdata 目录（macOS: `/opt/homebrew/share/tessdata/`，Linux: `/usr/share/tesseract-ocr/4.00/tessdata/`，Windows: 安装目录下的 `tessdata/`）。
 
 ## 常见问题
 
