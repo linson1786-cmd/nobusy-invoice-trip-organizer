@@ -1562,17 +1562,42 @@ def process_inbox():
     print(f"📥 阶段1: 处理 01 待分类/ ({len(files)} 个文件)")
     print(f"{'='*60}")
 
-    # OCR 依赖检查：如果有图片文件但 Tesseract 未安装，提前提示
+    # OCR 依赖检查：如果有图片文件但 Tesseract 未安装，尝试自动安装
     if not OCR_AVAILABLE:
         image_files = [f for f in files if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS]
         if image_files:
-            print(f"\n{'⚠️'*3} OCR 引擎未安装！{len(image_files)} 个图片文件将无法识别，全部移至 02 待核实/")
-            print(f"   安装 Tesseract OCR 引擎：")
-            print(f"   macOS:   brew install tesseract tesseract-lang")
-            print(f"   Ubuntu:  sudo apt install tesseract-ocr tesseract-ocr-chi-sim")
-            print(f"   Windows: 下载 https://github.com/UB-Mannheim/tesseract/wiki 安装")
-            print(f"   然后确保 Python 依赖已安装: pip install pytesseract Pillow")
-            print(f"   安装完成后重新运行文件识别即可\n")
+            print(f"\n{'⚠️'*3} OCR 引擎未安装！{len(image_files)} 个图片文件将无法识别")
+            print(f"   正在尝试自动安装 Tesseract OCR...\n")
+            # 尝试自动安装
+            try:
+                setup_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'setup.py')
+                if os.path.exists(setup_path):
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location("_setup_ocr", setup_path)
+                    setup_mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(setup_mod)
+                    ocr_ok, ocr_msg = setup_mod.check_and_install_tesseract(auto_install=True)
+                    if ocr_ok:
+                        # 安装成功，重新检测
+                        try:
+                            import pytesseract
+                            pytesseract.get_tesseract_version()
+                            OCR_AVAILABLE = True
+                            print(f"   ✅ Tesseract OCR 安装成功！图片文件将正常识别\n")
+                        except Exception:
+                            print(f"   ⚠️  安装成功但需重启终端，本次图片仍移至 02 待核实/\n")
+                    else:
+                        print(f"   ❌ 自动安装失败: {ocr_msg}\n")
+                        print(f"   安装完成后重新运行文件识别即可\n")
+                else:
+                    print(f"   setup.py 不存在，请手动安装 Tesseract OCR:")
+                    print(f"   macOS:   brew install tesseract tesseract-lang")
+                    print(f"   Ubuntu:  sudo apt install tesseract-ocr tesseract-ocr-chi-sim")
+                    print(f"   Windows: 下载 https://github.com/UB-Mannheim/tesseract/wiki 安装")
+                    print(f"   然后确保 Python 依赖已安装: pip install pytesseract Pillow\n")
+            except Exception as e:
+                print(f"   ❌ 自动安装异常: {e}")
+                print(f"   请手动安装: macOS brew install tesseract tesseract-lang\n")
 
     success = []
     review = []
