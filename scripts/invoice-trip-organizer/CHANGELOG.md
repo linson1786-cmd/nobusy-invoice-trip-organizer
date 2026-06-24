@@ -1,5 +1,20 @@
 # 版本变更日志
 
+## 1.0.24 - 2026-06-25
+
+### 修复
+
+- **金额解析不支持整数格式**：`extract_amount_from_text` 所有策略均要求 `\.\d{2}`（两位小数），导致 `¥1129`（整数）无法识别。修复：策略 1-8 改为 `([\d,]+(?:\.\d{1,2})?)` 兼容整数和小数；策略 9（全文兜底）保持仅小数防止误匹配。
+- **机票比价图降级金额同样不支持整数**：`extract_amount_for_flight_comparison` 降级策略 5 同样修复。
+- **`process_inbox()` 中 `OCR_AVAILABLE` 作用域 bug**：V1.0.23 新增 Tesseract 自动安装后在函数内赋值 `OCR_AVAILABLE = True`，Python 将其视为局部变量导致 `UnboundLocalError`。修复：添加 `global OCR_AVAILABLE` 声明。
+
+### 改进
+
+- **机票比价图分类扩展**：新增 OTA 平台关键词（飞猪、携程、Ctrip、Trip.com、去哪儿、同程旅行、预订成功、订单详情、出发城市、到达城市、起降时间、航班动态），让飞猪/携程预订截图正确匹配 机票比价图 而非 机票（后者会因无发票特征词被移入待核实）。
+- **机票比价图日期提取扩展**：`extract_date_for_flight_comparison` 新增"出发日期"、"起飞时间"、"乘机日期"、"航班日期"、"出发时间"、"行程日期" + 日期的识别模式，不再仅依赖"直飞"关键词。
+- **新增策略 5b**：`extract_amount_from_text` 新增"总价/订单金额/票价/总金额/合计金额/实付"+ 金额的识别，覆盖预订截图无 ¥ 前缀的场景。
+- **NON_REIMBURSE / CAT_ORDER fallback 补全**：`_gen_master_ledger` 硬编码 fallback 补入"机票比价图"。
+
 ## 1.0.23 - 2026-06-24
 
 ### 新功能
