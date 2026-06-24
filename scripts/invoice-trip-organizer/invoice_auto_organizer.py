@@ -750,11 +750,45 @@ def extract_route_for_flight_comparison(text):
 def extract_passenger_name(text):
     """机票比价图专用：提取乘机人姓名
 
-    识别格式：乘机人：张三 / 乘机人 张三 / 乘机人:张三
+    识别格式：
+    1. 乘机人：张三 / 乘机人 张三 / 乘机人:张三（带标签）
+    2. 身份证上方的独立中文姓名（去哪儿/飞猪/携程 OTA 截图）
+       - 姓名通常在「已选/X成人」和「身份证」之间独占一行
+    3. 遇同行 / 出行人 等标签后的姓名
     """
-    m = re.search(r'乘机人[：:\s]+([\u4e00-\u9fa5]{2,4})', text)
+    # 1. 标签模式：乘机人：xxx（禁止跨行匹配）
+    m = re.search(r'乘机人[：: \t]+([\u4e00-\u9fa5]{2,4})', text)
     if m:
         return m.group(1).strip()
+
+    # 2. OTA 截图模式：身份证紧上方或附近的独立中文姓名
+    #    排除标题文字（联系人信息、联系人姓名、乘客信息等）
+    exclude_words = {'联系人', '乘客', '出行', '新增', '姓名', '选择', '请填写',
+                     '填写人', '购票', '登机', '信息', '明细'}
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        line = line.strip()
+        # 跳过空行、太长、太短、含数字的行
+        if not line or len(line) > 6 or len(line) < 2:
+            continue
+        # 必须纯汉字（允许末尾标点）
+        clean = line.rstrip('，。、：；')
+        if not re.match(r'^[\u4e00-\u9fa5]{2,4}$', clean):
+            continue
+        # 排除标题词
+        if any(w in clean for w in exclude_words):
+            continue
+        # 检查上下文：附近有 身份证 / 已选 / 成人 / 邀同行
+        context = '\n'.join(lines[max(0,i-2):min(len(lines),i+3)])
+        if re.search(r'身份证|已选.*成人|邀同行|出行人| Passenger', context):
+            return clean
+
+    # 3. 遇同行/出行人 标签后的姓名
+    for label in ['遇同行', '出行人', '乘客']:
+        m = re.search(label + r'[：:\s]*([\u4e00-\u9fa5]{2,4})', text)
+        if m:
+            return m.group(1).strip()
+
     return None
 
 
