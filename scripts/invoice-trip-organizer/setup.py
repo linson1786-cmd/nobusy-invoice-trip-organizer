@@ -22,6 +22,16 @@ SKILL_SCRIPTS_DIR = SCRIPT_DIR
 PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 SKILL_DOCS_DIR = os.path.join(PROJECT_ROOT, "docs")
 
+
+def _read_version():
+    """从 VERSION 文件读取当前版本号，读取失败则返回 '1.0.0'"""
+    version_file = os.path.join(SCRIPT_DIR, "VERSION")
+    try:
+        with open(version_file, 'r', encoding='utf-8') as f:
+            return f.read().strip() or "1.0.0"
+    except Exception:
+        return "1.0.0"
+
 # 需要复制到工作目录的脚本文件
 SCRIPT_FILES = [
     "version_manager.py",
@@ -208,7 +218,10 @@ def get_current_base_dir(config):
     return None
 
 
-def generate_config_py(vault_path, skill_version="1.0.11"):
+def generate_config_py(vault_path, skill_version=None):
+    """生成 config.py 内容"""
+    if skill_version is None:
+        skill_version = _read_version()
     """生成 config.py 内容"""
     invoice_base = os.path.join(vault_path, SKILL_NAME, "01 发票整理")
     trip_base = os.path.join(vault_path, SKILL_NAME, "02 行程与员工报销单")
@@ -525,11 +538,11 @@ def do_init(vault_path=None):
 
     # 7. 生成 config.py（已存在则保留，不覆盖用户配置）
     print("⚙️  配置文件 config.py...")
-    skill_version = "1.0.11"
+    skill_version = "1.0.0"
     version_file = os.path.join(src_scripts_dir, "VERSION")
     if os.path.exists(version_file):
         with open(version_file, 'r', encoding='utf-8') as f:
-            skill_version = f.read().strip() or "1.0.11"
+            skill_version = f.read().strip() or "1.0.0"
 
     config_content = generate_config_py(vault_path, skill_version=skill_version)
     config_path = os.path.join(dst_scripts_dir, "config.py")
