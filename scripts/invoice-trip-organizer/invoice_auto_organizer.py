@@ -49,7 +49,7 @@ DONE_DIR = ""
 REVIEW_DIR = ""
 LOG_FILE = ""
 
-VALID_CATEGORIES = ["餐饮", "住宿", "机票", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "礼品", "结账单", "其他",
+VALID_CATEGORIES = ["餐饮", "住宿", "机票", "机票比价图", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "油电类", "礼品", "结账单", "其他",
                     "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"]
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.heic', '.bmp', '.tiff', '.tif', '.webp']
 PROCESSABLE_EXTENSIONS = ['.pdf'] + IMAGE_EXTENSIONS
@@ -73,7 +73,7 @@ try:
         # 重建正则 (VALID_CATEGORIES 可能已被覆盖)
         STANDARD_NAME_RE = re.compile(
             r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-            r'(?:_([^_\d]+(?:-[^_\d]+)?))?'   # Optional route/city
+            r'(?:_([^_\d]+(?:-[^_\d]+)?(?:_[\u4e00-\u9fa5]{2,10})?))?'   # Optional route/city + buyer
             r'(?:_(\d{1,4}))?'            # Optional suffix
             r'(?:_(\d{4})_(WB|YB))?'      # Optional status
             r'(?:_(\d{3}))?'              # Optional seq
@@ -113,7 +113,7 @@ def is_business_file(path):
 # 标准文件名正则 (确保在 config 覆盖后是最新版本)
 STANDARD_NAME_RE = re.compile(
     r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-    r'(?:_([^_\d]+(?:-[^_\d]+)?))?'   # Optional route/city: 出发地-到达地 或 住宿城市
+    r'(?:_([^_\d]+(?:-[^_\d]+)?(?:_[\u4e00-\u9fa5]{2,10})?))?'   # Optional route/city + buyer: 出发地-到达地_购买方简称
     r'(?:_(\d{1,4}))?'            # Optional suffix: 发票号后4位或序号
     r'(?:_(\d{4})_(WB|YB))?'      # Optional status: 操作日期_报销状态(WB未报/YB已报)
     r'(?:_(\d{3}))?'              # Optional seq: 序号编号(3位数字)
@@ -164,6 +164,7 @@ if 'CATEGORY_RULES' not in dir():
         (["充电", "蔚来", "NIO", "换电", "充电桩", "充电费"], "充电费"),
         (["滴滴", "打车", "网约车", "交通运输服务", "客运服务费"], "滴滴打车"),
         (["火车票", "高铁", "车票", "C3775", "二等座", "铁路", "电子客票", "一等座"], "高铁"),
+        (["直飞", "乘机人", "托运行李", "机场燃油", "机票比价"], "机票比价图"),
         (["机票", "航空", "航班", "登机牌", "CA ", "CZ ", "MU ", "HU ",
           "保险服务", "航意航延组合险标准计划", "经纪代理服务", "退票费"], "机票"),
         (["招待", "餐饮", "餐费", "就餐", "餐厅", "饭店", "酒家", "饮食", "菜品",
@@ -454,7 +455,7 @@ def convert_xml_to_pdf(xml_path, pdf_path):
 
         pdf.ln(8)
         pdf.set_font('CNFont', '', 7)
-        pdf.cell(0, 5, '此PDF由发票整理脚本从XML数据自动生成，为信息摘要型PDF，非官方版式。', new_x='LMARGIN', new_y='NEXT', align='C')
+        pdf.cell(0, 5, '此PDF由文件识别脚本从XML数据自动生成，为信息摘要型PDF，非官方版式。', new_x='LMARGIN', new_y='NEXT', align='C')
 
         pdf.output(pdf_path)
         return os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
@@ -570,7 +571,135 @@ def extract_trip_date_for_gaotie(text):
     return None, "无开车日期"
 
 
-def extract_invoice_number(text):
+def extract_date_for_flight_comparison(text):
+    """机票比价图专用：从"直飞"后提取航班日期
+
+    识别格式：
+    1. "直飞 06-15" / "直飞 06/15" (月-日)
+    2. "直飞 2026-06-15" / "直飞 2026/06/15" (完整日期)
+    3. "直飞 06月15日" (中文格式)
+    4. "直飞\n06-15" (OCR换行)
+
+    返回: (date_str, source_str) 或 (None, "无航班日期")
+    """
+    # 1. 直飞 + 完整日期 (2026-06-15 / 2026/06/15)
+    m = re.search(r'直飞[\s\n]*(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{y}-{mo:02d}-{d:02d}", "直飞完整日期"
+
+    # 2. 直飞 + 月-日 (06-15 / 06/15 / 06.15)
+    m = re.search(r'直飞[\s\n]*(\d{1,2})[月\-/.](\d{1,2})', text)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"2026-{mo:02d}-{d:02d}", "直飞月日"
+
+    # 3. 直飞 + 中文格式 (06月15日)
+    m = re.search(r'直飞[\s\n]*(\d{1,2})月(\d{1,2})日', text)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"2026-{mo:02d}-{d:02d}", "直飞中文日期"
+
+    # 4. 直飞后任意位置有日期（放宽搜索范围）
+    m = re.search(r'直飞[\s\S]{0,30}?(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{y}-{mo:02d}-{d:02d}", "直飞附近完整日期"
+    m = re.search(r'直飞[\s\S]{0,30}?(\d{1,2})[月\-/.](\d{1,2})日?', text)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"2026-{mo:02d}-{d:02d}", "直飞附近月日"
+
+    return None, "无航班日期"
+
+
+def extract_amount_for_flight_comparison(text):
+    """机票比价图专用：提取机场燃油费金额
+
+    识别格式：
+    1. "机场燃油 ¥50.00" / "机场燃油 50.00"
+    2. "机场建设费+燃油附加费 ¥70" 
+    3. "机场燃油费 50" (整数)
+    4. 降级：任意 "燃油" 附近金额
+    5. 降级：图片中最大金额（机票总价）
+    """
+    # 1. 机场燃油 + ¥金额
+    m = re.search(r'机场燃油[费]*[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+    if m:
+        val = float(m.group(1).replace(',', ''))
+        if 0 < val < 10000:
+            return f"{val:.2f}", "机场燃油"
+
+    # 2. 机场建设费+燃油附加费
+    m = re.search(r'机场建设费[+＋]燃油附加费[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+    if m:
+        val = float(m.group(1).replace(',', ''))
+        if 0 < val < 10000:
+            return f"{val:.2f}", "机场建设费+燃油附加费"
+
+    # 3. 燃油附加费
+    m = re.search(r'燃油附加费[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+    if m:
+        val = float(m.group(1).replace(',', ''))
+        if 0 < val < 10000:
+            return f"{val:.2f}", "燃油附加费"
+
+    # 4. 降级：燃油附近金额
+    m = re.search(r'燃油[\s\S]{0,20}?[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+    if m:
+        val = float(m.group(1).replace(',', ''))
+        if 0 < val < 10000:
+            return f"{val:.2f}", "燃油附近金额"
+
+    # 5. 降级：图片中所有金额取最大（机票总价）
+    amounts = re.findall(r'[¥￥]?\s*([\d,]+\.\d{2})', text)
+    if amounts:
+        nums = [float(a.replace(',', '')) for a in amounts if float(a.replace(',', '')) > 10]
+        if nums:
+            return f"{max(nums):.2f}", "图片最大金额(降级)"
+
+    return None, "无法提取金额"
+
+
+def extract_route_for_flight_comparison(text):
+    """机票比价图专用：提取出发地-到达地（城市-城市格式）
+
+    识别格式：
+    1. "广州-上海" / "广州→上海" / "广州 上海" (城市对)
+    2. "出发地:广州 目的地:上海"
+    """
+    cities = r'(北京|上海|广州|深圳|成都|重庆|杭州|南京|长春|昆明|长沙|武汉|西安|郑州|青岛|大连|厦门|贵阳|兰州|乌鲁木齐|合肥|宁波|温州|南宁|海口|三亚|福州|无锡|常州|苏州|天津|石家庄|太原|呼和浩特|哈尔滨|沈阳|济南|珠海|汕头|湛江|烟台|威海|南通|中山|深圳)'
+
+    # 1. 城市-城市 / 城市→城市
+    m = re.search(f'{cities}\\s*[-→➜]\\s*{cities}', text)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+
+    # 2. 出发地/目的地格式
+    m = re.search(f'出发地[：:\\s]*{cities}.*?目的地[：:\\s]*{cities}', text, re.DOTALL)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+
+    return None
+
+
+def extract_passenger_name(text):
+    """机票比价图专用：提取乘机人姓名
+
+    识别格式：乘机人：张三 / 乘机人 张三 / 乘机人:张三
+    """
+    m = re.search(r'乘机人[：:\s]+([\u4e00-\u9fa5]{2,4})', text)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+
     nums26 = re.findall(r'(?<!\d)2[56]\d{18}(?!\d)', text)
     if nums26:
         return nums26[0], "26-prefix"
@@ -614,6 +743,104 @@ def extract_seller_name_from_text(text):
         return m.group(1).strip()
     
     return None
+
+
+def extract_buyer_name_from_text(text):
+    """从PDF/OFD文本提取购买方（买方）名称
+    
+    PDF文本中"名称："出现两次：第一次=购方，第二次=销方
+    返回购方名称字符串，找不到返回None
+    """
+    if not text:
+        return None
+    lines = text.split('\n')
+    
+    # 找所有"名称："位置
+    positions = []
+    for i, line in enumerate(lines):
+        if re.match(r'^名称[：:]', line.strip()):
+            after = ''
+            if '：' in line:
+                after = line.split('：', 1)[1].strip()
+            elif ':' in line:
+                after = line.split(':', 1)[1].strip()
+            positions.append((i, after if after else None))
+    
+    # 第一处"名称"=购方
+    if positions:
+        buyer_pos, buyer_name = positions[0]
+        if buyer_name and len(buyer_name) > 3:
+            return buyer_name
+        # 名称后内容在下一非空行
+        for j in range(buyer_pos + 1, min(buyer_pos + 5, len(lines))):
+            content = lines[j].strip()
+            if content and len(content) > 3 and not content.startswith('统一社会') and not content.startswith('9') and not content.startswith('名称'):
+                return content
+    
+    # 降级: "购买方名称：" / "购方名称："
+    m = re.search(r'(?:购买方|购方)名称[：:\s]+(.+)', text)
+    if m:
+        name = m.group(1).strip()
+        if len(name) > 3:
+            return name
+    
+    return None
+
+
+def shorten_company_name(name):
+    """将公司全称转为简称
+    
+    例：
+    - 上海乐纯生物技术股份有限公司 → 乐纯生物
+    - 北京金达阳光科技有限公司 → 金达阳光
+    - 中国石油化工股份有限公司 → 中石化
+    """
+    if not name:
+        return ""
+    
+    s = name.strip()
+    
+    # 去除常见省市区前缀
+    prefixes = ['中国', '北京', '上海', '广州', '深圳', '广东', '天津', '重庆',
+                '浙江', '江苏', '四川', '山东', '湖北', '湖南', '福建', '安徽',
+                '河南', '河北', '陕西', '辽宁', '吉林', '黑龙江', '云南', '贵州',
+                '广西', '山西', '甘肃', '内蒙古', '新疆', '西藏', '宁夏', '青海',
+                '海南', '江西']
+    for p in prefixes:
+        if s.startswith(p) and len(s) > len(p) + 2:
+            s = s[len(p):]
+            # 去除"省"/"市"后缀
+            if s.startswith('省') or s.startswith('市'):
+                s = s[1:]
+            break
+    
+    # 去除常见公司类型后缀（从长到短匹配）
+    suffixes = ['股份有限公司', '有限责任公司', '科技有限公司',
+                '有限公司', '分公司', '公司', '集团']
+    for suf in suffixes:
+        if s.endswith(suf) and len(s) > len(suf) + 1:
+            s = s[:-len(suf)]
+            break
+    
+    # 去除常见尾部描述词
+    tail_words = ['技术', '科技', '服务', '贸易', '工程', '实业',
+                  '投资', '发展', '管理', '控股']
+    for tw in tail_words:
+        if s.endswith(tw) and len(s) > len(tw) + 1:
+            s = s[:-len(tw)]
+            break
+    
+    s = s.strip()
+    
+    # 结果太长(>6字)时取前4字
+    if len(s) > 6:
+        s = s[:4]
+    
+    # 结果为空或太短(<=1字)时，取原名前4字
+    if len(s) <= 1:
+        s = name[:4].strip()
+    
+    return s
 
 
 # 主要城市列表（用于住宿发票与结账单的城市配对）
@@ -922,6 +1149,8 @@ def extract_route(text, cat):
     base_cat = cat.split("(")[0] if "(" in cat else cat
     if base_cat == "机票":
         return extract_route_for_jp(text, cat)
+    elif base_cat == "机票比价图":
+        return extract_route_for_flight_comparison(text)
     elif base_cat == "高铁":
         return extract_route_for_gaotie(text, cat)
     elif base_cat == "住宿":
@@ -1027,6 +1256,23 @@ def extract_amount_from_filename(filename):
     return None
 
 
+# 发票内容特征词（用于判断 PDF 是否为发票/报销凭证）
+INVOICE_CONTENT_MARKERS = [
+    "发票号码", "发票代码", "开票日期", "价税合计", "机器编号",
+    "税号", "电子发票", "增值税", "行程报销单", "行程单",
+    "结账单", "住宿费", "通行费", "消费合计", "小写",
+    "收款人", "复核人", "开票人", "销售方", "购买方",
+    " Invoice", "Receipt", "Tax",
+]
+
+
+def has_invoice_markers(text):
+    """检查文本是否包含发票特征词，用于过滤非发票 PDF"""
+    if not text:
+        return False
+    return any(marker in text for marker in INVOICE_CONTENT_MARKERS)
+
+
 def classify(text, filename):
     """返回基础类别（不含子类型），用于流程逻辑判断"""
     s = (text or "") + filename
@@ -1075,7 +1321,7 @@ def is_standard_name(filename):
     # 降级匹配：不含序号的标准格式（02待核实中的文件）
     m_noseq = re.match(
         r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-        r'(?:_([^_\d]+(?:-[^_\d]+)?))?'
+        r'(?:_([^_\d]+(?:-[^_\d]+)?(?:_[\u4e00-\u9fa5]{2,10})?))?'
         r'(?:_(\d{1,4}))?'
         r'(?:_(\d{4})_(WB|YB))?'
         r'(\.\w+)$', filename)
@@ -1192,7 +1438,7 @@ def _scan_trips_for_invoice_dirs():
 def migrate_done_lodging_city_names():
     """一次性迁移 03 已完成和行程附件中的住宿类旧文件名，补入酒店所在城市。
 
-    场景：用户升级到支持住宿城市命名的新版本后，首次运行发票整理时，
+    场景：用户升级到支持住宿城市命名的新版本后，首次运行文件识别时，
     对已归档和已复制到行程目录的住宿/住宿(结账单)文件重新识别文本并重命名。
     """
     marker = os.path.join(BASE_ROOT, ".migration_lodging_city_v1_0_11.done")
@@ -1327,6 +1573,7 @@ def process_inbox():
     archived_dd_amounts = {}        # 已归档的滴滴打车金额: {date_amount_key: True}
     archived_gs_amounts = {}        # 已归档的高速费金额: {date_amount_key: True}
     archived_trip_amounts = {}      # 已归档的行程单金额: {date_amount_key: True}
+    archived_file_keys = set()      # 通用去重索引: {date_cat_label_amount} 无发票号时兜底
     zs_checkout_index = {}          # 住宿(结账单)配对索引: {amount_cities → [(date, filename)]}
     zs_invoice_index = {}           # 住宿发票反向配对索引: {amount_cities → [(date, filename, seller_name)]}
     # 索引结构改为列表，支持同金额多条结账单/发票（不同城市或不同入住日期）
@@ -1364,6 +1611,8 @@ def process_inbox():
                         archived_gs_amounts[da_key] = True
                     elif '行程单' in acat:
                         archived_trip_amounts[da_key] = True
+                    # 通用去重索引: 所有类别都记录 date_cat_amount
+                    archived_file_keys.add(f"{adate}_{acat}_{aamt:.2f}")
                     # 住宿(结账单)索引: 金额+城市 → [(入住日期, 文件名)]
                     # v3.24: 增加城市匹配，避免同金额跨城市误配
                     if acat == '住宿(结账单)':
@@ -1408,7 +1657,7 @@ def process_inbox():
                             zs_invoice_index[zs_amt_key] = []
                         zs_invoice_index[zs_amt_key].append((adate, afn, a_seller))
 
-    print(f"   已归档发票号: {len(archived_inv_nums)} 个 | 滴滴打车金额: {len(archived_dd_amounts)} 个 | 行程单金额: {len(archived_trip_amounts)} 个 | 住宿结账单索引: {len(zs_checkout_index)} 条 | 住宿发票索引: {len(zs_invoice_index)} 条")
+    print(f"   已归档发票号: {len(archived_inv_nums)} 个 | 滴滴打车金额: {len(archived_dd_amounts)} 个 | 行程单金额: {len(archived_trip_amounts)} 个 | 通用去重索引: {len(archived_file_keys)} 条 | 住宿结账单索引: {len(zs_checkout_index)} 条 | 住宿发票索引: {len(zs_invoice_index)} 条")
 
     def move_to_review(src, filename, reason):
         dst = os.path.join(REVIEW_DIR, filename)
@@ -1543,6 +1792,20 @@ def process_inbox():
                         else:
                             print(f"      🏨 无入住日期且无配对，使用开票日期={date}")
 
+            # 机票比价图类：从"直飞"提取航班日期，从"机场燃油"提取金额
+            if cat == "机票比价图":
+                flight_date, flight_source = extract_date_for_flight_comparison(text)
+                if flight_date:
+                    date = flight_date
+                    print(f"      ✈️ 机票比价图航班日期={flight_date} (来源={flight_source})")
+                fuel_amount, fuel_source = extract_amount_for_flight_comparison(text)
+                if fuel_amount:
+                    amount = fuel_amount
+                    print(f"      ✈️ 机场燃油金额={fuel_amount} (来源={fuel_source})")
+                passenger = extract_passenger_name(text)
+                if passenger:
+                    print(f"      ✈️ 乘机人={passenger}")
+
             if not date:
                 move_to_review(src, f, "OFD无法提取日期")
                 continue
@@ -1569,6 +1832,19 @@ def process_inbox():
                     continue
                 seen_invoice_global.add(num)
 
+            # 通用去重: 无发票号时用 date+cat_label+amount 匹配 03 已完成
+            if not inv and date and amount:
+                try:
+                    dup_key = f"{date}_{cat_label}_{float(amount):.2f}"
+                except:
+                    dup_key = f"{date}_{cat_label}_{amount}"
+                if dup_key in archived_file_keys:
+                    os.remove(src)
+                    dup_deleted += 1
+                    inbox_log_entries.append((f, "删除-OFD已归档重复(日期+类别+金额)", "", f"{date} {cat_label} ¥{amount}"))
+                    print(f"      🗑️ 删除（03已完成已存在: {date} {cat_label} ¥{amount}）")
+                    continue
+
             # 尝试OFD→PDF转换（写到临时目录避免权限问题）
             base_name = os.path.splitext(f)[0]
             tmp_pdf = os.path.join('/tmp', f"{base_name}_ofd2pdf.pdf")
@@ -1589,10 +1865,19 @@ def process_inbox():
             # 机票/高铁类含出发地-到达地 (SOP v3.10)
             # v3.20: 末尾增加操作日期与报销状态
             # v3.22: 序号放在末尾(状态后缀之后)
+            # v3.30: 增加购买方公司简称
+            # v3.40: 机票比价图使用乘机人姓名代替购买方
+            if cat == "机票比价图":
+                passenger = extract_passenger_name(text)
+                buyer_short = passenger if passenger else ""
+            else:
+                buyer_name = extract_buyer_name_from_text(text)
+                buyer_short = shorten_company_name(buyer_name) if buyer_name else ""
+            buyer_part = f"_{buyer_short}" if buyer_short else ""
             status_suffix = make_status_suffix()
             route_part = f"_{route}" if route else ""
             seq_suffix = f"_{next_seq:03d}"
-            new_name = f"{date}_{cat_label}_{amount}{route_part}{status_suffix}{seq_suffix}{out_ext}"
+            new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
             month_dir = os.path.join(DONE_DIR, date[:7])
             os.makedirs(month_dir, exist_ok=True)
             dst = os.path.join(month_dir, new_name)
@@ -1600,12 +1885,12 @@ def process_inbox():
             if os.path.exists(dst):
                 if inv:
                     suffix = inv[0][-4:]
-                    new_name = f"{date}_{cat_label}_{amount}{route_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
+                    new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
                     dst = os.path.join(month_dir, new_name)
                 else:
                     counter = 1
                     while os.path.exists(dst):
-                        new_name = f"{date}_{cat_label}_{amount}{route_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
+                        new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
                         dst = os.path.join(month_dir, new_name)
                         counter += 1
 
@@ -1613,6 +1898,11 @@ def process_inbox():
             next_seq += 1
             success.append((dst, new_name, date, amount, cat_label))
             print(f"      → 03 已完成/{date[:7]}/{new_name}")
+            # 更新通用去重索引
+            try:
+                archived_file_keys.add(f"{date}_{cat_label}_{float(amount):.2f}")
+            except:
+                pass
 
         if ofd_converted > 0 or ofd_dup_removed > 0:
             print(f"\n   📊 OFD预处理汇总: 转换{ofd_converted}个 | 删除重复{ofd_dup_removed}个")
@@ -1787,6 +2077,19 @@ def process_inbox():
                     continue
                 seen_invoice_global.add(num)
 
+            # 通用去重: 无发票号时用 date+cat_label+amount 匹配 03 已完成
+            if not inv and date and amount:
+                try:
+                    dup_key = f"{date}_{cat_label}_{float(amount):.2f}"
+                except:
+                    dup_key = f"{date}_{cat_label}_{amount}"
+                if dup_key in archived_file_keys:
+                    os.remove(src)
+                    dup_deleted += 1
+                    inbox_log_entries.append((f, "删除-XML已归档重复(日期+类别+金额)", "", f"{date} {cat_label} ¥{amount}"))
+                    print(f"      🗑️ 删除（03已完成已存在: {date} {cat_label} ¥{amount}）")
+                    continue
+
             # 尝试XML→PDF转换（写到临时目录避免权限问题）
             base_name = os.path.splitext(f)[0]
             tmp_pdf = os.path.join('/tmp', f"{base_name}_xml2pdf.pdf")
@@ -1807,10 +2110,17 @@ def process_inbox():
             # 机票/高铁类含出发地-到达地 (SOP v3.10)
             # v3.20: 末尾增加操作日期与报销状态
             # v3.22: 序号放在末尾(状态后缀之后)
+            # v3.30: 增加购买方公司简称（XML优先用结构化字段）
+            if xml_fields:
+                buyer_name = xml_fields.get('buyer_name', '') or extract_buyer_name_from_text(text)
+            else:
+                buyer_name = extract_buyer_name_from_text(text)
+            buyer_short = shorten_company_name(buyer_name) if buyer_name else ""
+            buyer_part = f"_{buyer_short}" if buyer_short else ""
             status_suffix = make_status_suffix()
             route_part = f"_{route}" if route else ""
             seq_suffix = f"_{next_seq:03d}"
-            new_name = f"{date}_{cat_label}_{amount}{route_part}{status_suffix}{seq_suffix}{out_ext}"
+            new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
             month_dir = os.path.join(DONE_DIR, date[:7])
             os.makedirs(month_dir, exist_ok=True)
             dst = os.path.join(month_dir, new_name)
@@ -1818,12 +2128,12 @@ def process_inbox():
             if os.path.exists(dst):
                 if inv:
                     suffix = inv[0][-4:]
-                    new_name = f"{date}_{cat_label}_{amount}{route_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
+                    new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
                     dst = os.path.join(month_dir, new_name)
                 else:
                     counter = 1
                     while os.path.exists(dst):
-                        new_name = f"{date}_{cat_label}_{amount}{route_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
+                        new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
                         dst = os.path.join(month_dir, new_name)
                         counter += 1
 
@@ -1831,6 +2141,11 @@ def process_inbox():
             next_seq += 1
             success.append((dst, new_name, date, amount, cat_label))
             print(f"      → 03 已完成/{date[:7]}/{new_name}")
+            # 更新通用去重索引
+            try:
+                archived_file_keys.add(f"{date}_{cat_label}_{float(amount):.2f}")
+            except:
+                pass
 
         if xml_converted > 0 or xml_dup_removed > 0:            print(f"\n   📊 XML预处理汇总: 转换{xml_converted}个 | 删除重复{xml_dup_removed}个")
 
@@ -2008,7 +2323,25 @@ def process_inbox():
                     else:
                         print(f"   🏨 无入住日期且无配对，使用开票日期={date}")
 
-        # 机票类/高铁类提取出发地-到达地 (SOP v3.10)
+        # 机票比价图类：从"直飞"提取航班日期，从"机场燃油"提取金额
+        if cat == "机票比价图":
+            flight_date, flight_source = extract_date_for_flight_comparison(text)
+            if flight_date:
+                date = flight_date
+                print(f"   ✈️ 机票比价图航班日期={flight_date} (来源={flight_source})")
+            else:
+                print(f"   ✈️ 无航班日期，使用提取日期={date}")
+            fuel_amount, fuel_source = extract_amount_for_flight_comparison(text)
+            if fuel_amount:
+                amount = fuel_amount
+                print(f"   ✈️ 机场燃油金额={fuel_amount} (来源={fuel_source})")
+            else:
+                print(f"   ⚠️ 无法提取机场燃油金额")
+            passenger = extract_passenger_name(text)
+            if passenger:
+                print(f"   ✈️ 乘机人={passenger}")
+
+        # 机票类/高铁类/机票比价图类提取出发地-到达地 (SOP v3.10)
         route = extract_route(text, cat_label)
 
         if not date:
@@ -2017,20 +2350,49 @@ def process_inbox():
         if not amount:
             move_to_review(src, f, "无法提取金额")
             continue
+
+        # 发票内容校验：非发票 PDF（无发票特征词）移入待核实
+        # 机票比价图是截图不是发票，跳过此检查
+        if cat != "机票比价图" and not has_invoice_markers(text):
+            move_to_review(src, f, "非发票内容(无发票特征词)")
+            continue
         try:
             amount = f"{float(amount.replace(',','')):.2f}"
         except:
             move_to_review(src, f, "金额格式异常")
             continue
 
+        # 通用去重: 无发票号时用 date+cat_label+amount 匹配 03 已完成
+        # 放在日期调整之后，确保用最终归档日期匹配
+        if not inv and date and amount:
+            try:
+                dup_key = f"{date}_{cat_label}_{float(amount):.2f}"
+            except:
+                dup_key = f"{date}_{cat_label}_{amount}"
+            if dup_key in archived_file_keys:
+                os.remove(src)
+                dup_deleted += 1
+                inbox_log_entries.append((f, "删除-PDF已归档重复(日期+类别+金额)", "", f"{date} {cat_label} ¥{amount}"))
+                print(f"   🗑️ 删除（03已完成已存在: {date} {cat_label} ¥{amount}）")
+                continue
+
         # 生成标准文件名 (用含子类型的类别标签)
         # 机票/高铁类含出发地-到达地 (SOP v3.10)
         # v3.20: 末尾增加操作日期与报销状态
         # v3.22: 序号放在末尾(状态后缀之后)
+        # v3.30: 增加购买方公司简称
+        # v3.40: 机票比价图使用乘机人姓名代替购买方
+        if cat == "机票比价图":
+            passenger = extract_passenger_name(text)
+            buyer_short = passenger if passenger else ""
+        else:
+            buyer_name = extract_buyer_name_from_text(text)
+            buyer_short = shorten_company_name(buyer_name) if buyer_name else ""
+        buyer_part = f"_{buyer_short}" if buyer_short else ""
         status_suffix = make_status_suffix()
         route_part = f"_{route}" if route else ""
         seq_suffix = f"_{next_seq:03d}"
-        new_name = f"{date}_{cat_label}_{amount}{route_part}{status_suffix}{seq_suffix}{ext}"
+        new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}{status_suffix}{seq_suffix}{ext}"
         month_dir = os.path.join(DONE_DIR, date[:7])
         os.makedirs(month_dir, exist_ok=True)
         dst = os.path.join(month_dir, new_name)
@@ -2038,12 +2400,12 @@ def process_inbox():
         if os.path.exists(dst):
             if inv:
                 suffix = inv[0][-4:]
-                new_name = f"{date}_{cat_label}_{amount}{route_part}_{suffix}{status_suffix}{seq_suffix}{ext}"
+                new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{ext}"
                 dst = os.path.join(month_dir, new_name)
             else:
                 counter = 1
                 while os.path.exists(dst):
-                    new_name = f"{date}_{cat_label}_{amount}{route_part}_{counter}{status_suffix}{seq_suffix}{ext}"
+                    new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{ext}"
                     dst = os.path.join(month_dir, new_name)
                     counter += 1
 
@@ -2066,6 +2428,11 @@ def process_inbox():
                 da_key = f"{date}_{float(amount):.2f}"
                 archived_gs_amounts[da_key] = True
             except: pass
+        # 更新通用去重索引
+        try:
+            archived_file_keys.add(f"{date}_{cat_label}_{float(amount):.2f}")
+        except:
+            pass
 
     return success, review, dup_deleted, inbox_log_entries
 
@@ -2127,7 +2494,7 @@ def process_review():
             # 用简单正则匹配不含序号的标准格式
             m_noseq = re.match(
                 r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES) + r')_(\d+\.\d{2})'
-                r'(?:_([^_\d]+-[^_\d]+))?'
+                r'(?:_([^_\d]+(?:-[^_\d]+)?(?:_[\u4e00-\u9fa5]{2,10})?))?'
                 r'(?:_(\d{1,4}))?'
                 r'(?:_(\d{4})_(WB|YB))?'
                 r'(\.\w+)$', f)
@@ -2592,9 +2959,9 @@ def _gen_master_ledger(all_records, stage_data):
             md += f"| {r['suffix']} | {r['date']} | {r['cat']} | ¥{r['amount']:,.2f} | `{r['filename']}` |\n"
 
     md += "\n---\n\n## 台账与日志链接\n\n"
-    md += "- [[01 发票整理/01 待分类/日志|01 待分类日志]]\n"
-    md += "- [[01 发票整理/02 待核实/日志|02 待核实日志]]\n"
-    md += "- [[01 发票整理/03 已完成/台账|03 已完成台账]]\n"
+    md += "- [[01 文件识别整理/01 待分类/日志|01 待分类日志]]\n"
+    md += "- [[01 文件识别整理/02 待核实/日志|02 待核实日志]]\n"
+    md += "- [[01 文件识别整理/03 已完成/台账|03 已完成台账]]\n"
     md += "- [[03 行程/2026 年/行程总览|行程总览]]\n"
 
     # 总台账路径 (从 config.py 读取，可被覆盖)

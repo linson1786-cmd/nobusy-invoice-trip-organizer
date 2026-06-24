@@ -1,6 +1,6 @@
 # 个人行程与报销 Skill
 
-> **版本**: V1.0.11  
+> **版本**: 见 `scripts/invoice-trip-organizer/VERSION` 文件
 > **创建日期**: 2026-06-23  
 > **项目归属**: NoBusy 别虾忙｜AI 管理实战  
 > **负责人**: Linson  
@@ -150,6 +150,7 @@ invoice-trip-organizer/
 │       ├── import_trips.py
 │       ├── email_manager.py
 │       ├── audit_03_done.py
+│       ├── rename_update.py
 │       └── release_check.py
 ├── Templates/             # 模板文件
 └── 项目管理/              # 项目管理文档
@@ -173,8 +174,9 @@ invoice-trip-organizer/
 
 1. 修改 `scripts/invoice-trip-organizer/VERSION` 文件
 2. 更新 `scripts/invoice-trip-organizer/CHANGELOG.md`
-3. 运行 `python3 scripts/invoice-trip-organizer/release_check.py`
-4. 同步到 GitHub 并创建对应 tag（如 `v1.0.8`）
+3. 更新 `SKILL.md` frontmatter 中的 `version` 和 `description`
+4. 运行 `python3 scripts/invoice-trip-organizer/release_check.py`
+5. 同步到 GitHub 并创建对应 tag（如 `v1.0.x`）
 5. 使用人运行 `deploy.py --upgrade` 自动升级
 
 ---

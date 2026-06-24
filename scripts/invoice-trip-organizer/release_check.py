@@ -323,7 +323,7 @@ def check_lodging_done_migration() -> bool:
     demo_root = Path("/private/tmp/invoice-trip-lodging-migration-check")
     if demo_root.exists():
         shutil.rmtree(demo_root)
-    done_dir = demo_root / "01 发票整理" / "03 已完成" / "2026-01"
+    done_dir = demo_root / "01 文件识别整理" / "03 已完成" / "2026-01"
     done_dir.mkdir(parents=True, exist_ok=True)
     old_file = done_dir / "2026-01-05_住宿_264.00_0624_WB_001.pdf"
     old_file.write_text("demo", encoding="utf-8")
@@ -337,8 +337,8 @@ def check_lodging_done_migration() -> bool:
         f"spec=importlib.util.spec_from_file_location('iao', {str(SCRIPT_DIR / 'invoice_auto_organizer.py')!r});"
         "m=importlib.util.module_from_spec(spec);"
         "spec.loader.exec_module(m);"
-        f"m.BASE_ROOT={str(demo_root / '01 发票整理')!r};"
-        f"m.DONE_DIR={str(demo_root / '01 发票整理' / '03 已完成')!r};"
+        f"m.BASE_ROOT={str(demo_root / '01 文件识别整理')!r};"
+        f"m.DONE_DIR={str(demo_root / '01 文件识别整理' / '03 已完成')!r};"
         f"m.TRIP_ROOT={str(demo_root / '02 行程与员工报销单')!r};"
         "m._extract_text_for_existing_invoice=lambda path: '销售方名称：中山市东区某某酒店有限公司\\n商品名称：住宿服务';"
         "m.migrate_done_lodging_city_names();"
@@ -347,7 +347,7 @@ def check_lodging_done_migration() -> bool:
     new_file = done_dir / "2026-01-05_住宿_264.00_中山_0624_WB_001.pdf"
     trip_new_file = trip_lodging_dir / "2026-01-05_住宿_264.00_中山_0624_WB_001.pdf"
     trip_list = trip_lodging_dir.parent / "发票文件清单.md"
-    marker = demo_root / "01 发票整理" / ".migration_lodging_city_v1_0_11.done"
+    marker = demo_root / "01 文件识别整理" / ".migration_lodging_city_v1_0_11.done"
     if result.returncode == 0 and new_file.exists() and trip_new_file.exists() and marker.exists() and trip_list.exists() and "中山" in trip_list.read_text(encoding="utf-8"):
         ok("03 已完成和行程附件住宿旧文件一次性迁移验证通过")
         return True

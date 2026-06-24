@@ -22,6 +22,16 @@ SKILL_SCRIPTS_DIR = SCRIPT_DIR
 PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 SKILL_DOCS_DIR = os.path.join(PROJECT_ROOT, "docs")
 
+
+def _read_version():
+    """从 VERSION 文件读取当前版本号，读取失败则返回 '1.0.0'"""
+    version_file = os.path.join(SCRIPT_DIR, "VERSION")
+    try:
+        with open(version_file, 'r', encoding='utf-8') as f:
+            return f.read().strip() or "1.0.0"
+    except Exception:
+        return "1.0.0"
+
 # 需要复制到工作目录的脚本文件
 SCRIPT_FILES = [
     "version_manager.py",
@@ -33,6 +43,7 @@ SCRIPT_FILES = [
     "import_trips.py",
     "audit_03_done.py",
     "release_check.py",
+    "refresh.py",
     "init.py",
     "setup.py",
     "config_template.py",
@@ -201,16 +212,19 @@ def get_current_base_dir(config):
     # 回退: 从 BASE_ROOT 推断
     base_root = getattr(config, 'BASE_ROOT', None)
     if base_root:
-        # BASE_ROOT = .../个人行程与报销/01 发票整理
+        # BASE_ROOT = .../个人行程与报销/01 文件识别整理
         # 向上两级 = .../个人行程与报销
         return os.path.dirname(os.path.dirname(base_root))
 
     return None
 
 
-def generate_config_py(vault_path, skill_version="1.0.11"):
+def generate_config_py(vault_path, skill_version=None):
     """生成 config.py 内容"""
-    invoice_base = os.path.join(vault_path, SKILL_NAME, "01 发票整理")
+    if skill_version is None:
+        skill_version = _read_version()
+    """生成 config.py 内容"""
+    invoice_base = os.path.join(vault_path, SKILL_NAME, "01 文件识别整理")
     trip_base = os.path.join(vault_path, SKILL_NAME, "02 行程与员工报销单")
 
     content = f'''"""
@@ -226,20 +240,24 @@ def generate_config_py(vault_path, skill_version="1.0.11"):
 # ========== Skill 版本（由版本管理器自动更新，请勿手动修改）==========
 SKILL_VERSION = "{skill_version}"
 
+# ========== 数据迁移版本（记录已执行迁移的版本，由 rename_update.py 自动更新）==========
+# 当 SKILL_VERSION > LAST_MIGRATION_VERSION 时，升级流程会自动检测是否需要数据迁移
+LAST_MIGRATION_VERSION = "{skill_version}"
+
 # ========== 路径配置 ==========
 
 # 项目根目录（个人行程与报销 的父目录）
 OBSIDIAN_VAULT = "{vault_path}"
 
-# 发票整理相对路径
-INVOICE_BASE_REL = "个人行程与报销/01 发票整理"
+# 01 文件识别整理相对路径
+INVOICE_BASE_REL = "个人行程与报销/01 文件识别整理"
 
 # 行程与报销单相对路径
 TRIP_BASE_REL = "个人行程与报销/02 行程与员工报销单"
 
 # ===== 脚本实际使用的路径变量 =====
 
-# 发票整理根目录（脚本用）
+# 01 文件识别整理根目录（脚本用）
 BASE_ROOT = "{invoice_base}"
 INPUT_DIR = BASE_ROOT + "/01 待分类"
 DONE_DIR = BASE_ROOT + "/03 已完成"
@@ -273,7 +291,7 @@ EMAIL_DOWNLOAD_DIR = "email_attachments"
 # ========== 分类规则（一般无需修改） ==========
 
 VALID_CATEGORIES = [
-    "餐饮", "住宿", "机票", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "礼品", "结账单", "其他",
+    "餐饮", "住宿", "机票", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "油电类", "礼品", "结账单", "其他",
     "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"
 ]
 
@@ -287,7 +305,7 @@ CAT_TO_SUBDIR = {{
     "滴滴打车": "打车", "滴滴打车(行程单)": "打车",
     "礼品": "礼品",
     "高速费": "其他", "高速费(行程单)": "其他",
-    "充电费": "其他", "行程单": "其他", "结账单": "其他", "其他": "其他",
+    "充电费": "其他", "油电类": "其他", "行程单": "其他", "结账单": "其他", "其他": "其他",
 }}
 
 SUBDIRS = ["机票高铁", "住宿", "餐饮", "打车", "礼品", "其他"]
@@ -301,7 +319,9 @@ CATEGORY_RULES = [
       "日用杂品", "日用品", "日化用品",
       "移动通信设备", "通讯器材"], "礼品"),
     (["高速", "通行费", "路桥费", "ETC"], "高速费"),
-    (["充电", "蔚来", "NIO", "换电", "充电桩"], "充电费"),
+    (["充电费", "蔚来", "NIO", "换电", "充电桩"], "充电费"),
+    (["加油", "汽油", "柴油", "中石化", "中石油", "中海油", "壳牌",
+      "油品", "燃油", "加油站", "供电", "电费", "充电服务"], "油电类"),
     (["滴滴", "打车", "网约车", "交通运输服务", "客运服务费"], "滴滴打车"),
     (["火车票", "高铁", "车票", "铁路", "电子客票"], "高铁"),
     (["机票", "航空", "航班", "登机牌",
@@ -446,9 +466,9 @@ def do_init(vault_path=None):
     current_year = datetime.now().year
     dirs_to_create = [
         base_dir,
-        os.path.join(base_dir, "01 发票整理", "01 待分类"),
-        os.path.join(base_dir, "01 发票整理", "02 待核实"),
-        os.path.join(base_dir, "01 发票整理", "03 已完成"),
+        os.path.join(base_dir, "01 文件识别整理", "01 待分类"),
+        os.path.join(base_dir, "01 文件识别整理", "02 待核实"),
+        os.path.join(base_dir, "01 文件识别整理", "03 已完成"),
         os.path.join(base_dir, "02 行程与员工报销单"),
         os.path.join(base_dir, "02 行程与员工报销单", f"{current_year} 年"),
         os.path.join(base_dir, "scripts"),
@@ -473,11 +493,11 @@ def do_init(vault_path=None):
     # 4. 创建初始化 MD 文件
     print("📝 创建初始化文件...")
     md_files = [
-        (os.path.join(base_dir, "01 发票整理", "01 待分类", "日志.md"),
+        (os.path.join(base_dir, "01 文件识别整理", "01 待分类", "日志.md"),
          get_log_md_content("01 待分类")),
-        (os.path.join(base_dir, "01 发票整理", "02 待核实", "日志.md"),
+        (os.path.join(base_dir, "01 文件识别整理", "02 待核实", "日志.md"),
          get_log_md_content("02 待核实")),
-        (os.path.join(base_dir, "01 发票整理", "03 已完成", "台账.md"),
+        (os.path.join(base_dir, "01 文件识别整理", "03 已完成", "台账.md"),
          get_ledger_md_content()),
         (os.path.join(base_dir, "总台账.md"),
          get_total_ledger_md_content()),
@@ -525,11 +545,11 @@ def do_init(vault_path=None):
 
     # 7. 生成 config.py（已存在则保留，不覆盖用户配置）
     print("⚙️  配置文件 config.py...")
-    skill_version = "1.0.11"
+    skill_version = "1.0.0"
     version_file = os.path.join(src_scripts_dir, "VERSION")
     if os.path.exists(version_file):
         with open(version_file, 'r', encoding='utf-8') as f:
-            skill_version = f.read().strip() or "1.0.11"
+            skill_version = f.read().strip() or "1.0.0"
 
     config_content = generate_config_py(vault_path, skill_version=skill_version)
     config_path = os.path.join(dst_scripts_dir, "config.py")
@@ -558,7 +578,7 @@ def do_init(vault_path=None):
     print()
     print("目录结构:")
     print(f"  {base_dir}/")
-    print(f"  ├── 01 发票整理/")
+    print(f"  ├── 01 文件识别整理/")
     print(f"  │   ├── 01 待分类/     ← 放入新发票")
     print(f"  │   ├── 02 待核实/     ← 脚本无法识别的文件")
     print(f"  │   └── 03 已完成/     ← 已整理归档")
@@ -570,7 +590,7 @@ def do_init(vault_path=None):
     print("下一步:")
     print("  1. 把发票文件放入 01 待分类/")
     print("  2. 运行: python3 invoice_auto_organizer.py")
-    print("  3. 或对我说「发票整理」")
+    print("  3. 或对我说「文件识别」")
     print("=" * 50)
     return True
 

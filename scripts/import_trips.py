@@ -506,6 +506,8 @@ def main():
             matched = trip_ao.scan_done_invoices(start_date, end_date)
             if matched:
                 trip_ao.copy_invoices_to_trip(matched, trip_dir, clear_existing=is_refresh)
+                # 餐饮类发票复制到月度餐饮目录（不放入行程）
+                trip_ao.copy_dining_to_monthly(matched, year, month)
 
             # 生成发票文件清单
             _, count_reimburse, total_reimburse = trip_ao.gen_invoice_list_md(

@@ -50,7 +50,7 @@ if 'BASE_ROOT' not in dir():
         REIMBURSEMENT_TEMPLATE = ""
     if 'CAT_TO_SUBDIR' not in dir():
         CAT_TO_SUBDIR = {
-            "机票": "机票高铁", "机票(保险)": "机票高铁", "机票比价图": "机票高铁", "高铁": "机票高铁",
+            "机票": "机票高铁", "机票(保险)": "机票高铁", "高铁": "机票高铁",
             "住宿": "住宿", "住宿(结账单)": "住宿",
             "餐饮": "餐饮",
             "滴滴打车": "打车", "滴滴打车(行程单)": "打车",
@@ -61,11 +61,11 @@ if 'BASE_ROOT' not in dir():
     if 'SUBDIRS' not in dir():
         SUBDIRS = ["机票高铁", "住宿", "打车", "礼品", "其他"]
     if 'NON_REIMBURSE' not in dir():
-        NON_REIMBURSE = ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单", "机票比价图"]
+        NON_REIMBURSE = ["行程单", "滴滴打车(行程单)", "高速费(行程单)", "住宿(结账单)", "结账单"]
 
 if 'VALID_CATEGORIES' not in dir():
     VALID_CATEGORIES = [
-        "餐饮", "住宿", "机票", "机票比价图", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "油电类", "礼品", "结账单", "其他",
+        "餐饮", "住宿", "机票", "高铁", "滴滴打车", "行程单", "高速费", "充电费", "油电类", "礼品", "结账单", "其他",
         "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"
     ]
 
@@ -194,7 +194,7 @@ return: {route_list[-1]}
 route:
 {yaml_route}
 days: {days}
-status: 文件整理中
+status: 发票整理中
 tags:
   - 行程
   - 出差
@@ -461,7 +461,7 @@ def update_trip_overview(trip_id, start_date, end_date, route_list, folder_name,
 
     route_str = '-'.join(route_list)
     # 添加新行
-    new_row = f"| 出差{trip_id} | {start_date}～{end_date} | {route_str} | {count_reimburse}张 | ¥{total_reimburse:,.2f} | 文件整理中 | [[{month_str}/{folder_name}/01-行程详情|出差{trip_id}]] | [[个人行程与报销/02 行程与员工报销单/2026 年/{month_str}/{folder_name}/02-发票文件/发票文件清单|发票文件清单]] |\n"
+    new_row = f"| 出差{trip_id} | {start_date}～{end_date} | {route_str} | {count_reimburse}张 | ¥{total_reimburse:,.2f} | 发票整理中 | [[{month_str}/{folder_name}/01-行程详情|出差{trip_id}]] | [[个人行程与报销/02 行程与员工报销单/2026 年/{month_str}/{folder_name}/02-发票文件/发票文件清单|发票文件清单]] |\n"
 
     # 查找表格并插入
     lines = md.split('\n')

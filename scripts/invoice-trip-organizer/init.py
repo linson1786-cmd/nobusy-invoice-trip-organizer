@@ -63,7 +63,7 @@ def create_dirs(config):
     """根据配置创建目录结构"""
     print("\n📁 创建目录结构...")
 
-    # 发票整理目录
+    # 01 文件识别整理目录
     invoice_root = getattr(config, 'INVOICE_ROOT', None)
     if not invoice_root:
         print("   ❌ config.py 中未找到 INVOICE_ROOT")

@@ -282,8 +282,8 @@ def register_account_macos():
     # 显示名称
     ttk.Label(frm, text="显示名称：").pack(anchor="w")
     entry_name = tk.Entry(frm, width=44, **entry_opts)
-    entry_name.insert(0, default_name)
     entry_name.pack(fill="x", ipady=4, pady=(0, 12))
+    entry_name.insert(0, default_name)
 
     # 按钮
     btn_frame = ttk.Frame(frm)
