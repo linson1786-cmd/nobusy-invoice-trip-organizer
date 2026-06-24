@@ -531,6 +531,23 @@ def _do_deploy_from(source_root, source_scripts_dir, target_label=""):
 
     old_ver = deployed_v or "未安装"
 
+    # ===== 目录名迁移检测（升级时自动执行）=====
+    try:
+        rename_script = os.path.join(DEPLOY_SCRIPTS, "rename_update.py")
+        if os.path.exists(rename_script) and os.path.exists(config_dst):
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("_ru", rename_script)
+            ru = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(ru)
+            mig_changed, mig_msg = ru.migrate_directory_name(dry_run=False)
+            if mig_changed:
+                print(f"  📁 目录名迁移: {mig_msg}")
+                print(f"  ⚠️  目录已重命名，请运行「刷新」以更新所有数据")
+                print()
+    except Exception as e:
+        print(f"  ⚠️ 目录名迁移检测失败: {e}")
+        print()
+
     # ===== 数据迁移检测 =====
     migration_result = check_data_migration(new_version, old_ver)
 
