@@ -1,5 +1,15 @@
 # 版本变更日志
 
+## 1.0.23 - 2026-06-24
+
+### 新功能
+
+- **Tesseract OCR 自动安装**：新增 `check_and_install_tesseract()` 函数，在三个场景自动检测并尝试安装：
+  - `setup.py` 初始化时：创建目录后自动检查，macOS 下通过 `brew install tesseract tesseract-lang` 自动安装
+  - `deploy.py` 升级时：升级完成后自动检查，提示安装状态
+  - `invoice_auto_organizer.py` 文件识别时：检测到图片但 OCR 不可用时，自动尝试安装，安装成功后立即重新识别
+- macOS 下全自动（Homebrew 安装不需要 sudo），Ubuntu/Windows 给出安装命令引导用户手动执行
+
 ## 1.0.22 - 2026-06-24
 
 ### 修复
