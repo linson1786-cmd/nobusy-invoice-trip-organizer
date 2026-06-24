@@ -1562,6 +1562,18 @@ def process_inbox():
     print(f"📥 阶段1: 处理 01 待分类/ ({len(files)} 个文件)")
     print(f"{'='*60}")
 
+    # OCR 依赖检查：如果有图片文件但 Tesseract 未安装，提前提示
+    if not OCR_AVAILABLE:
+        image_files = [f for f in files if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS]
+        if image_files:
+            print(f"\n{'⚠️'*3} OCR 引擎未安装！{len(image_files)} 个图片文件将无法识别，全部移至 02 待核实/")
+            print(f"   安装 Tesseract OCR 引擎：")
+            print(f"   macOS:   brew install tesseract tesseract-lang")
+            print(f"   Ubuntu:  sudo apt install tesseract-ocr tesseract-ocr-chi-sim")
+            print(f"   Windows: 下载 https://github.com/UB-Mannheim/tesseract/wiki 安装")
+            print(f"   然后确保 Python 依赖已安装: pip install pytesseract Pillow")
+            print(f"   安装完成后重新运行文件识别即可\n")
+
     success = []
     review = []
     dup_deleted = 0

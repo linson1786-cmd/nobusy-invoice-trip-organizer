@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.20 - 2026-06-24
+
+- Added startup guidance when image files are present but Tesseract OCR is not installed.
+- Expanded SKILL.md dependency instructions for Tesseract OCR installation on macOS, Ubuntu/Debian, and Windows.
+- Added FAQ for image invoices moving to `02 待核实/` because OCR is unavailable.
+
 ## v1.0.19 - 2026-06-24
 
 - Fixed missing `extract_invoice_number` function definition in `invoice_auto_organizer.py`.
