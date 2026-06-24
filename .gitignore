@@ -43,6 +43,10 @@ ENV/
 # === 项目特定：敏感文件 ===
 # 用户配置文件（包含个人路径、邮箱、授权码）
 scripts/config.py
+/scripts/*.py
+/scripts/VERSION
+/scripts/CHANGELOG.md
+/scripts/config_template.py
 交付包/*/scripts/config.py
 源文件/*/scripts/config.py
 **/config.py

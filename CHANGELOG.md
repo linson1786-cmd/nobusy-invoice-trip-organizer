@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.18 - 2026-06-24
+
+- Added flight price comparison screenshot recognition as a non-reimbursement file category.
+- Extracts flight date, amount, route, and passenger name from comparison screenshots.
+- Archives flight comparison screenshots under the flight/train category without requiring invoice keywords.
+- Synchronized release metadata across project README, root changelog, source changelog, WorkBuddy Skill, and Codex Skill.
+
 ## v1.0.11 - 2026-06-24
 
 - Added lodging city extraction for accommodation invoices.
