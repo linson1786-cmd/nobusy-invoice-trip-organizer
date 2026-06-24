@@ -1,5 +1,11 @@
 # 版本变更日志
 
+## 1.0.26 - 2026-06-25
+
+### 改进
+
+- **无年份日期改用动态当前年份**：`extract_date_for_flight_comparison` 和 `extract_date_from_filename` 中所有硬编码的 `2026` 替换为 `datetime.now().year`，确保跨年后自动适配。
+
 ## 1.0.25 - 2026-06-25
 
 ### 修复
