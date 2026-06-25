@@ -1,7 +1,17 @@
 ---
 name: invoice-trip-organizer
-description: 行程报销管家 V1.0.32 | Trip Expense Butler | 配置化版本，支持分享与在线升级
+description: "行程报销管家——个人行程与发票报销自动化管理。Personal trip and invoice reimbursement automation. Auto-classify invoices/receipts (PDF/OFD/XML/image OCR), organize trip folders, download from email, generate expense reports. Triggers: 文件识别, 行程整理, 下载发票, 导入, 升级."
+description_zh: "行程报销管家——个人行程与发票报销自动化管理"
+description_en: "Trip Expense Butler — Personal trip and invoice reimbursement automation"
 version: 1.0.32
+display_name: "行程报销管家"
+display_name_en: "Trip Expense Butler"
+author: linson
+visibility: public
+agent_created: true
+metadata:
+  category: office-efficiency
+  brand: NoBusy
 trigger: ["文件识别", "行程整理", "导入", "导入文件", "新增行程", "初始化", "初始化设置", "重置", "下载发票", "收发票", "升级", "检查更新", "刷新"]
 ---
 
