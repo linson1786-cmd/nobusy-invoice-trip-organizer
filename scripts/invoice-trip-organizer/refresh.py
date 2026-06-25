@@ -3,6 +3,7 @@
 刷新 - 升级后一键更新所有数据
 
 功能:
+  Phase 0c: 版本核查 — 升级后首次刷新时，把 03 已完成文件移回 01 待分类重新识别
   Phase 1: 数据迁移 — 重新识别 03 已完成中所有文件的类别和购买方简称 (rename_update.py)
   Phase 2: 行程刷新 — 重新扫描所有已有行程，从 03 已完成重新匹配发票
            - 清空旧发票附件，重新复制
@@ -105,6 +106,40 @@ def delete_overview(trip_root):
         print(f"   清除旧行程总览（将重新生成）")
 
 
+def update_refresh_version():
+    """刷新完成后，更新 config.py 中的 LAST_REFRESH_VERSION 为当前 SKILL_VERSION"""
+    config_path = os.path.join(SCRIPT_DIR, 'config.py')
+    if not os.path.exists(config_path):
+        return
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception:
+        return
+
+    skill_ver = getattr(config, 'SKILL_VERSION', '')
+    if not skill_ver:
+        return
+
+    if 'LAST_REFRESH_VERSION' in content:
+        new_content = re.sub(
+            r'^LAST_REFRESH_VERSION\s*=\s*"[^"]*"',
+            f'LAST_REFRESH_VERSION = "{skill_ver}"',
+            content,
+            flags=re.MULTILINE
+        )
+    else:
+        new_content = content + f'\n# ========== 刷新版本（由 refresh.py 自动更新）==========\nLAST_REFRESH_VERSION = "{skill_ver}"\n'
+
+    if new_content != content:
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+        except Exception:
+            pass
+
+
 def main():
     dry_run = '--dry-run' in sys.argv or '-n' in sys.argv
 
@@ -145,6 +180,60 @@ def main():
             return
     except Exception as e:
         print(f"   目录迁移检查失败: {e}")
+    print()
+
+    # ===== Phase 0b: 行程/报销单拆分迁移 =====
+    print("[Phase 0b] 行程/报销单目录拆分迁移检查")
+    print("-" * 50)
+    try:
+        split_changed, split_msg = rename_update.migrate_trip_reimbursement_split(dry_run=dry_run)
+        print(f"   {split_msg}")
+        if split_changed and not dry_run:
+            print("   ⚠️  目录已拆分，请重新运行刷新以使用新路径")
+            print("=" * 60)
+            return
+    except Exception as e:
+        print(f"   行程/报销单拆分迁移检查失败: {e}")
+    print()
+
+    # ===== Phase 0c: 版本核查 — 升级后重新识别 03 已完成 =====
+    print("[Phase 0c] 版本核查（升级后重新识别 03 已完成）")
+    print("-" * 50)
+
+    last_refresh_ver = getattr(config, 'LAST_REFRESH_VERSION', '0.0.0')
+    print(f"   Skill 版本: {skill_ver} | 上次刷新版本: {last_refresh_ver}")
+
+    need_reprocess = False
+    try:
+        # 简单版本比较（语义化版本字符串直接比较不够精确，但对我们的场景足够了）
+        # 用 tuple(int) 比较
+        def _parse_ver(v):
+            try:
+                return tuple(int(x) for x in v.split('.'))
+            except Exception:
+                return (0, 0, 0)
+        need_reprocess = _parse_ver(skill_ver) > _parse_ver(last_refresh_ver)
+    except Exception:
+        need_reprocess = skill_ver != last_refresh_ver
+
+    if need_reprocess and not dry_run:
+        print(f"   检测到版本升级 ({last_refresh_ver} → {skill_ver})，重新识别 03 已完成...")
+        moved = invoice_ao.reprocess_done_files()
+        if moved > 0:
+            print(f"   正在重新分类...")
+            try:
+                success, review, dup_deleted, _ = invoice_ao.process_inbox()
+                print(f"   ✅ 重新分类完成: 归档 {len(success)} | 退回 {len(review)} | 去重 {dup_deleted}")
+            except Exception as e:
+                print(f"   ⚠️ 重新分类失败: {e}")
+        else:
+            print(f"   03 已完成无文件，跳过")
+        update_refresh_version()
+    elif need_reprocess and dry_run:
+        print(f"   [预览] 检测到版本升级，将重新识别 03 已完成")
+    else:
+        print(f"   版本未变化，跳过重新识别")
+
     print()
 
     # ===== Phase 1: 数据迁移 =====

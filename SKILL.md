@@ -3,7 +3,7 @@ name: invoice-trip-organizer
 description: "行程报销管家——个人行程与发票报销自动化管理。Personal trip and invoice reimbursement automation. Auto-classify invoices/receipts (PDF/OFD/XML/image OCR), organize trip folders, download from email, generate expense reports. Triggers: 文件识别, 行程整理, 下载发票, 导入, 升级."
 description_zh: "行程报销管家——个人行程与发票报销自动化管理"
 description_en: "Trip Expense Butler — Personal trip and invoice reimbursement automation"
-version: 1.0.32
+version: 1.0.35
 display_name: "行程报销管家"
 display_name_en: "Trip Expense Butler"
 author: linson
@@ -154,7 +154,8 @@ python3 import_trips.py --file trips.txt
 | `SKILL_VERSION` | 当前 Skill 版本号（自动更新，勿手动修改） | `"1.0.x"` |
 | `OBSIDIAN_VAULT` | Obsidian 笔记库根目录 | `~/Documents/MyVault` |
 | `INVOICE_BASE_REL` | 01 文件识别整理相对路径 | `个人行程与报销/01 文件识别整理` |
-| `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程与员工报销单` |
+| `TRIP_BASE_REL` | 行程目录相对路径 | `个人行程与报销/02 行程` |
+| `REIMBURSEMENT_BASE_REL` | 报销单目录相对路径 | `个人行程与报销/03 报销单` |
 | `REIMBURSEMENT_TEMPLATE` | 报销单 Excel 模板路径 | `...xlsx` |
 
 > 📮 邮箱配置不再写入 config.py。运行下载脚本时会弹出界面选择/注册邮箱，账户信息保存在 `~/.invoice-trip/email_accounts.json`，支持多个邮箱。
@@ -168,18 +169,22 @@ python3 import_trips.py --file trips.txt
 │   ├── 02 待核实/     ← 脚本无法识别的文件
 │   └── 03 已完成/     ← 已整理归档（按月分文件夹）
 │       └── 台账.md
-└── {TRIP_BASE_REL}/
+├── {TRIP_BASE_REL}/
+│   └── 2026 年/
+│       └── 1 月/
+│           ├── 出差1-2026-01-04～2026-01-09_广州-上海-.../
+│           │   ├── 01-行程详情.md
+│           │   └── 02-发票文件/
+│           │       ├── 机票高铁/
+│           │       ├── 住宿/
+│           │       ├── 打车/
+│           │       ├── 礼品/
+│           │       └── 其他/
+│           └── 餐饮/          ← 餐饮发票按月归档（不放入行程）
+└── {REIMBURSEMENT_BASE_REL}/
     └── 2026 年/
         └── 1 月/
-            ├── 出差1-2026-01-04～2026-01-09_广州-上海-.../
-            │   ├── 01-行程详情.md
-            │   └── 02-发票文件/
-            │       ├── 机票高铁/
-            │       ├── 住宿/
-            │       ├── 打车/
-            │       ├── 礼品/
-            │       └── 其他/
-            └── 餐饮/          ← 餐饮发票按月归档（不放入行程）
+            └── 出差1-报销单.xlsx   ← 报销单 Excel（按行程生成）
 ```
 
 > **餐饮发票规则**：餐饮类发票不放入行程文件夹，按月归档到月度目录下的"餐饮"文件夹（与出差文件夹同级）。

@@ -327,7 +327,7 @@ def check_lodging_done_migration() -> bool:
     done_dir.mkdir(parents=True, exist_ok=True)
     old_file = done_dir / "2026-01-05_住宿_264.00_0624_WB_001.pdf"
     old_file.write_text("demo", encoding="utf-8")
-    trip_lodging_dir = demo_root / "02 行程与员工报销单" / "2026 年" / "1 月" / "出差1-2026-01-04～2026-01-06_广州-中山-广州" / "02-发票文件" / "住宿"
+    trip_lodging_dir = demo_root / "02 行程" / "2026 年" / "1 月" / "出差1-2026-01-04～2026-01-06_广州-中山-广州" / "02-发票文件" / "住宿"
     trip_lodging_dir.mkdir(parents=True, exist_ok=True)
     trip_old_file = trip_lodging_dir / "2026-01-05_住宿_264.00_0624_WB_001.pdf"
     trip_old_file.write_text("demo", encoding="utf-8")
@@ -339,7 +339,7 @@ def check_lodging_done_migration() -> bool:
         "spec.loader.exec_module(m);"
         f"m.BASE_ROOT={str(demo_root / '01 文件识别整理')!r};"
         f"m.DONE_DIR={str(demo_root / '01 文件识别整理' / '03 已完成')!r};"
-        f"m.TRIP_ROOT={str(demo_root / '02 行程与员工报销单')!r};"
+        f"m.TRIP_ROOT={str(demo_root / '02 行程')!r};"
         "m._extract_text_for_existing_invoice=lambda path: '销售方名称：中山市东区某某酒店有限公司\\n商品名称：住宿服务';"
         "m.migrate_done_lodging_city_names();"
     )

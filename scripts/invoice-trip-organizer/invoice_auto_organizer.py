@@ -679,45 +679,24 @@ def extract_date_for_flight_comparison(text):
 
 
 def extract_amount_for_flight_comparison(text):
-    """机票比价图专用：提取机场燃油费金额
+    """机票比价图专用：提取金额（优先总价，降级取燃油费）
 
-    识别格式：
-    1. "机场燃油 ¥50.00" / "机场燃油 50.00"
-    2. "机场建设费+燃油附加费 ¥70" 
-    3. "机场燃油费 50" (整数)
-    4. 降级：任意 "燃油" 附近金额
-    5. 降级：图片中最大金额（机票总价）
+    识别格式（按优先级）：
+    1. 总价标签：合计/应付/总价/实付/需付/同意付款 附近的 ¥金额
+    2. 降级：图片中最大金额（通常是机票总价，过滤 <10 和 >100000）
+    3. 再降级：机场燃油/机建燃油/燃油附加费金额（仅总价提取不到时用）
     """
-    # 1. 机场燃油 + ¥金额
-    m = re.search(r'机场燃油[费]*[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
-    if m:
-        val = float(m.group(1).replace(',', ''))
-        if 0 < val < 10000:
-            return f"{val:.2f}", "机场燃油"
+    # 1. 总价标签优先 — OTA 截图底部总价
+    total_indicators = ['同意付款', '合计', '应付总价', '订单总价', '应付', '总价',
+                        '实付', '需付', '支付金额', '票价总额', '机票总价']
+    for indicator in total_indicators:
+        m = re.search(rf'{indicator}[\s\S]{{0,30}}?[¥￥]\s*([\d,]+\\.?\d{{0,2}})', text)
+        if m:
+            val = float(m.group(1).replace(',', ''))
+            if 10 < val < 100000:
+                return f"{val:.2f}", f"总价标签({indicator})"
 
-    # 2. 机场建设费+燃油附加费
-    m = re.search(r'机场建设费[+＋]燃油附加费[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
-    if m:
-        val = float(m.group(1).replace(',', ''))
-        if 0 < val < 10000:
-            return f"{val:.2f}", "机场建设费+燃油附加费"
-
-    # 3. 燃油附加费
-    m = re.search(r'燃油附加费[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
-    if m:
-        val = float(m.group(1).replace(',', ''))
-        if 0 < val < 10000:
-            return f"{val:.2f}", "燃油附加费"
-
-    # 4. 降级：燃油附近金额
-    m = re.search(r'燃油[\s\S]{0,20}?[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
-    if m:
-        val = float(m.group(1).replace(',', ''))
-        if 0 < val < 10000:
-            return f"{val:.2f}", "燃油附近金额"
-
-    # 5. 降级：图片中所有金额取最大（机票总价）— 支持整数和小数
-    # ¥可选但过滤过大数字（身份证号/电话号等）和空匹配
+    # 2. 降级：图片中所有金额取最大（通常是机票总价）
     amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)', text)
     if amounts:
         nums = []
@@ -727,12 +706,40 @@ def extract_amount_for_flight_comparison(text):
                 continue
             try:
                 val = float(a)
-                if 10 < val < 100000:  # 过滤过大数字（身份证/电话等）
+                if 10 < val < 100000:  # 过滤过小(<10)和过大(身份证/电话)数字
                     nums.append(val)
             except ValueError:
                 continue
         if nums:
-            return f"{max(nums):.2f}", "图片最大金额(降级)"
+            return f"{max(nums):.2f}", "图片最大金额"
+
+    # 3. 再降级：机场燃油/机建燃油费金额（仅总价提取不到时用）
+    m = re.search(r'(?:机场|机建)燃油[费]*[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+    if m:
+        val = float(m.group(1).replace(',', ''))
+        if 0 < val < 10000:
+            return f"{val:.2f}", "机场/机建燃油"
+
+    # 4. 机场建设费+燃油附加费
+    m = re.search(r'机场建设费[+＋]燃油附加费[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+    if m:
+        val = float(m.group(1).replace(',', ''))
+        if 0 < val < 10000:
+            return f"{val:.2f}", "机场建设费+燃油附加费"
+
+    # 5. 燃油附加费
+    m = re.search(r'燃油附加费[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+    if m:
+        val = float(m.group(1).replace(',', ''))
+        if 0 < val < 10000:
+            return f"{val:.2f}", "燃油附加费"
+
+    # 6. 最后降级：任意"燃油"附近金额（去掉机建燃油冗余，已被3覆盖）
+    m = re.search(r'(?<!机建)燃油[\s\S]{0,20}?[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+    if m:
+        val = float(m.group(1).replace(',', ''))
+        if 0 < val < 10000:
+            return f"{val:.2f}", "燃油附近金额"
 
     return None, "无法提取金额"
 
@@ -2885,6 +2892,81 @@ def process_inbox():
 
 # ===== v1.0.30: 重新识别 02 待核实中的文件 =====
 
+def reprocess_done_files():
+    """把 03 已完成/ 中的所有文件移回 01 待分类/，让升级后的新逻辑重新识别
+
+    用于刷新流程 — 升级后首次刷新时，把已归档文件全部重新 OCR/分类/命名，
+    确保所有文件使用最新规则。移动前检查 01 待分类/ 中是否有同名文件。
+
+    Returns:
+        int: 移回的文件数量
+    """
+    if not os.path.isdir(DONE_DIR):
+        return 0
+
+    total_moved = 0
+    skipped = 0
+    os.makedirs(INPUT_DIR, exist_ok=True)
+
+    # 遍历 03 已完成/ 的年/月 子目录
+    for year_name in sorted(os.listdir(DONE_DIR)):
+        year_dir = os.path.join(DONE_DIR, year_name)
+        if not os.path.isdir(year_dir) or year_name.startswith('.'):
+            continue
+        for month_name in sorted(os.listdir(year_dir)):
+            month_dir = os.path.join(year_dir, month_name)
+            if not os.path.isdir(month_dir) or month_name.startswith('.'):
+                continue
+            for f in sorted(os.listdir(month_dir)):
+                src = os.path.join(month_dir, f)
+                if not os.path.isfile(src) or f.startswith('.'):
+                    continue
+                # 跳过非业务文件（如台账.md）
+                if f in ('台账.md', '日志.md'):
+                    continue
+                if not is_business_file(src):
+                    continue
+
+                dst = os.path.join(INPUT_DIR, f)
+
+                # 检查 01 待分类/ 中是否已有同名文件
+                if os.path.exists(dst):
+                    name, ext = os.path.splitext(f)
+                    counter = 1
+                    while os.path.exists(dst):
+                        dst = os.path.join(INPUT_DIR, f"{name}_{counter}{ext}")
+                        counter += 1
+
+                shutil.move(src, dst)
+                total_moved += 1
+
+    # 清理空的年/月子目录
+    for year_name in sorted(os.listdir(DONE_DIR)):
+        year_dir = os.path.join(DONE_DIR, year_name)
+        if not os.path.isdir(year_dir):
+            continue
+        for month_name in sorted(os.listdir(year_dir)):
+            month_dir = os.path.join(year_dir, month_name)
+            if not os.path.isdir(month_dir):
+                continue
+            try:
+                if not os.listdir(month_dir):
+                    os.rmdir(month_dir)
+            except OSError:
+                pass
+        try:
+            if not os.listdir(year_dir):
+                os.rmdir(year_dir)
+        except OSError:
+            pass
+
+    if total_moved > 0:
+        print(f"\n🔄 重新识别 03 已完成/ 中的 {total_moved} 个文件...")
+        print(f"   ✅ 已全部移回 01 待分类/（将在 Phase 1 重新识别）")
+
+    return total_moved
+
+
 def reprocess_review_files():
     """把 02 待核实/ 中的文件移回 01 待分类/，让新逻辑有机会重新识别
 
@@ -3321,8 +3403,8 @@ def _update_trip_invoice_lists(trips):
                 md += f"| {seq:03d} | {i['date']} | {i['category']} | ¥{float(i['amount']):,.2f} | {remark} | {i.get('status', 'WB')} | {i['filename']} |\n"
             md += "\n"
 
-        md += f"\n> 📁 附件目录: [[个人行程与报销/02 行程与员工报销单/2026 年/{trip['month_name']}/{trip['folder_name']}/02-发票文件|02-发票文件]]\n"
-        md += f"> 📝 行程详情: [[个人行程与报销/02 行程与员工报销单/2026 年/{trip['month_name']}/{trip['folder_name']}/01-行程详情|01-行程详情]]\n"
+        md += f"\n> 📁 附件目录: [[个人行程与报销/02 行程/2026 年/{trip['month_name']}/{trip['folder_name']}/02-发票文件|02-发票文件]]\n"
+        md += f"> 📝 行程详情: [[个人行程与报销/02 行程/2026 年/{trip['month_name']}/{trip['folder_name']}/01-行程详情|01-行程详情]]\n"
 
         md_path = os.path.join(invoice_dir, "发票文件清单.md")
         with open(md_path, 'w', encoding='utf-8') as f:

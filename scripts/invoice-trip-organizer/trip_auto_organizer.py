@@ -46,6 +46,7 @@ if 'BASE_ROOT' not in dir():
     INVOICE_ROOT = ""
     DONE_DIR = ""
     TRIP_ROOT = ""
+    REIMBURSEMENT_ROOT = ""
     if 'REIMBURSEMENT_TEMPLATE' not in dir():
         REIMBURSEMENT_TEMPLATE = ""
     if 'CAT_TO_SUBDIR' not in dir():
@@ -89,12 +90,16 @@ def ensure_configured():
         "INVOICE_ROOT": INVOICE_ROOT,
         "DONE_DIR": DONE_DIR,
         "TRIP_ROOT": TRIP_ROOT,
+        "REIMBURSEMENT_ROOT": globals().get("REIMBURSEMENT_ROOT", ""),
     }
     missing = [name for name, value in required.items() if not value]
     if missing:
         print("❌ 未完成初始化：缺少路径配置 " + ", ".join(missing))
         print("请先运行：python3 setup.py init")
         return False
+    # 补充默认值
+    if not globals().get("REIMBURSEMENT_ROOT"):
+        globals()["REIMBURSEMENT_ROOT"] = ""
     return True
 
 
@@ -242,7 +247,7 @@ graph LR
     invoice_links = f"""
 ## 发票文件清单
 
-> 详见 [[个人行程与报销/02 行程与员工报销单/2026 年/{month_in_name}/{folder_name}/02-发票文件/发票文件清单|发票文件清单]]
+> 详见 [[个人行程与报销/02 行程/2026 年/{month_in_name}/{folder_name}/02-发票文件/发票文件清单|发票文件清单]]
 
 ## 发票文件
 
@@ -434,9 +439,9 @@ def gen_invoice_list_md(matched, trip_dir, folder_name, month_str):
             md += f"| {i['date']} | {i['category']} | ¥{float(i['amount']):,.2f} | {remark} | {i['filename']} |\n"
         md += "\n"
 
-    md += f"\n> 📁 附件目录: [[个人行程与报销/02 行程与员工报销单/2026 年/{month_str}/{folder_name}/02-发票文件|02-发票文件]]\n"
-    md += f"> 📝 行程详情: [[个人行程与报销/02 行程与员工报销单/2026 年/{month_str}/{folder_name}/01-行程详情|01-行程详情]]\n"
-    md += f"> 🍽️ 餐饮发票不放入行程，按月归档至 [[个人行程与报销/02 行程与员工报销单/2026 年/{month_str}/餐饮|{month_str}/餐饮]]\n"
+    md += f"\n> 📁 附件目录: [[个人行程与报销/02 行程/2026 年/{month_str}/{folder_name}/02-发票文件|02-发票文件]]\n"
+    md += f"> 📝 行程详情: [[个人行程与报销/02 行程/2026 年/{month_str}/{folder_name}/01-行程详情|01-行程详情]]\n"
+    md += f"> 🍽️ 餐饮发票不放入行程，按月归档至 [[个人行程与报销/02 行程/2026 年/{month_str}/餐饮|{month_str}/餐饮]]\n"
 
     md_path = os.path.join(invoice_dir, "发票文件清单.md")
     with open(md_path, 'w', encoding='utf-8') as f:
@@ -461,7 +466,7 @@ def update_trip_overview(trip_id, start_date, end_date, route_list, folder_name,
 
     route_str = '-'.join(route_list)
     # 添加新行
-    new_row = f"| 出差{trip_id} | {start_date}～{end_date} | {route_str} | {count_reimburse}张 | ¥{total_reimburse:,.2f} | 文件整理中 | [[{month_str}/{folder_name}/01-行程详情|出差{trip_id}]] | [[个人行程与报销/02 行程与员工报销单/2026 年/{month_str}/{folder_name}/02-发票文件/发票文件清单|发票文件清单]] |\n"
+    new_row = f"| 出差{trip_id} | {start_date}～{end_date} | {route_str} | {count_reimburse}张 | ¥{total_reimburse:,.2f} | 文件整理中 | [[{month_str}/{folder_name}/01-行程详情|出差{trip_id}]] | [[个人行程与报销/02 行程/2026 年/{month_str}/{folder_name}/02-发票文件/发票文件清单|发票文件清单]] |\n"
 
     # 查找表格并插入
     lines = md.split('\n')
@@ -611,11 +616,15 @@ def main():
         print(f"   💡 发票未齐全，报销单暂不生成")
     else:
         print(f"\n✅ 发票完整性检查通过")
-        # 复制报销单模板
+        # 复制报销单模板到 03 报销单 目录
         if os.path.exists(TEMPLATE_XLSX):
-            dest = os.path.join(trip_dir, f"出差{trip_id}-报销单.xlsx")
+            reimb_year_dir = os.path.join(REIMBURSEMENT_ROOT, f"{year} 年", month_str)
+            os.makedirs(reimb_year_dir, exist_ok=True)
+            dest = os.path.join(reimb_year_dir, f"出差{trip_id}-报销单.xlsx")
             shutil.copy2(TEMPLATE_XLSX, dest)
-            print(f"✅ 复制报销单模板到: 出差{trip_id}-报销单.xlsx")
+            print(f"✅ 复制报销单模板到: 03 报销单/{year} 年/{month_str}/出差{trip_id}-报销单.xlsx")
+        else:
+            print(f"   💡 未配置报销单模板 (REIMBURSEMENT_TEMPLATE)，跳过报销单生成")
 
     # 汇总
     dining_count = len([inv for inv in matched if inv['category'] == '餐饮'])

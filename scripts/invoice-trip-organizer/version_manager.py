@@ -505,6 +505,27 @@ def _update_migration_version(config_path, version):
         pass
 
 
+def _update_refresh_version(config_path, version):
+    """更新 config.py 中的 LAST_REFRESH_VERSION"""
+    if not os.path.exists(config_path):
+        return
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        if 'LAST_REFRESH_VERSION' in content:
+            new_content = re.sub(
+                r'^LAST_REFRESH_VERSION\s*=\s*"[^"]*"',
+                f'LAST_REFRESH_VERSION = "{version}"',
+                content,
+                flags=re.MULTILINE
+            )
+            if new_content != content:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+    except Exception:
+        pass
+
+
 def check_and_update(config_path, user_scripts_dir=None, auto=True, silent=False):
     """检查版本并自动更新（推荐入口函数）
 

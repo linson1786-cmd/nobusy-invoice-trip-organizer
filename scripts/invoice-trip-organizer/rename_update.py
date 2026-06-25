@@ -6,7 +6,7 @@
   1. 扫描 03 已完成/ 所有文件
   2. 用最新 CATEGORY_RULES 重新识别类别，若与文件名中类别不同则更新
   3. 从文件内容提取购买方名称 → 生成简称，若无则追加
-  4. 同步更新行程目录(02 行程与员工报销单/)中的副本
+  4. 同步更新行程目录(02 行程/)中的副本
   5. 支持 --dry-run 预览模式（只显示变更，不实际重命名）
   6. 支持 --check 检测模式（静默检测，输出 JSON，供升级流程调用）
   7. 迁移完成后自动更新 config.py 的 LAST_MIGRATION_VERSION
@@ -494,6 +494,151 @@ def migrate_directory_name(dry_run=False):
     return True, f"目录迁移完成: {matched_old} → {NEW_NAME}"
 
 
+def migrate_trip_reimbursement_split(dry_run=False):
+    """目录拆分迁移：02 行程与员工报销单 → 02 行程 + 03 报销单
+
+    1. 读取 config.py，检测是否包含旧目录名 "02 行程与员工报销单"
+    2. 重命名物理目录: "02 行程与员工报销单" → "02 行程"
+    3. 创建 "03 报销单" 目录
+    4. 将行程文件夹中的报销单 xlsx 移到 03 报销单 对应年月目录
+    5. 更新 config.py 路径 + 追加 REIMBURSEMENT_BASE_REL / REIMBURSEMENT_ROOT
+
+    返回: (changed: bool, message: str)
+    """
+    import importlib.util
+
+    config_path = os.path.join(SCRIPT_DIR, 'config.py')
+    if not os.path.exists(config_path):
+        return False, "config.py 不存在"
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception as e:
+        return False, f"读取 config.py 失败: {e}"
+
+    OLD_NAME = "02 行程与员工报销单"
+    NEW_TRIP_NAME = "02 行程"
+    NEW_REIMB_NAME = "03 报销单"
+
+    # 动态加载 config 获取实际路径
+    old_trip_root = ""
+    vault_path = ""
+    try:
+        spec = importlib.util.spec_from_file_location("_cfg_mig2", config_path)
+        cfg = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cfg)
+        vault_path = getattr(cfg, 'OBSIDIAN_VAULT', '')
+        # 尝试从 OBSIDIAN_VAULT + 旧相对路径反推旧目录路径
+        if vault_path:
+            old_trip_root = os.path.join(os.path.expanduser(vault_path), "个人行程与报销", OLD_NAME)
+    except Exception:
+        pass
+
+    # 如果 config.py 已更新为新名称，需要从 vault 反推旧路径
+    if not old_trip_root or OLD_NAME not in old_trip_root:
+        m = re.search(r'^TRIP_ROOT\s*=\s*"([^"]*)"', content, re.MULTILINE)
+        if m:
+            current_trip_root = m.group(1)
+            if OLD_NAME in current_trip_root:
+                old_trip_root = current_trip_root
+            elif vault_path:
+                old_trip_root = os.path.join(os.path.expanduser(vault_path), "个人行程与报销", OLD_NAME)
+        elif vault_path:
+            old_trip_root = os.path.join(os.path.expanduser(vault_path), "个人行程与报销", OLD_NAME)
+
+    old_dir = os.path.expanduser(old_trip_root) if old_trip_root else ""
+    new_trip_root = old_trip_root.replace(OLD_NAME, NEW_TRIP_NAME) if old_trip_root else ""
+    new_reimb_root = old_trip_root.replace(OLD_NAME, NEW_REIMB_NAME) if old_trip_root else ""
+
+    # 文件系统优先：旧目录不存在才跳过
+    if not old_dir or not os.path.exists(old_dir):
+        return False, "无需迁移（旧目录不存在，路径已是拆分后名称）"
+
+    if dry_run:
+        msg = f"[预览] 目录拆分迁移:\n"
+        msg += f"   重命名: {OLD_NAME} → {NEW_TRIP_NAME}\n"
+        msg += f"   新建: {NEW_REIMB_NAME}\n"
+        msg += f"   移动: 行程文件夹内报销单 xlsx → {NEW_REIMB_NAME}/年/月/"
+        return True, msg
+
+    # 1. 重命名物理目录
+    old_dir = os.path.expanduser(old_trip_root)
+    new_trip_dir = os.path.expanduser(new_trip_root)
+    new_reimb_dir = os.path.expanduser(new_reimb_root)
+
+    if os.path.exists(old_dir) and not os.path.exists(new_trip_dir):
+        try:
+            os.rename(old_dir, new_trip_dir)
+            print(f"   ✅ 目录已重命名: {OLD_NAME} → {NEW_TRIP_NAME}")
+        except Exception as e:
+            return False, f"重命名目录失败: {e}"
+    elif os.path.exists(new_trip_dir):
+        print(f"   ℹ️  新行程目录已存在: {new_trip_dir}")
+
+    # 2. 创建 03 报销单 目录
+    os.makedirs(new_reimb_dir, exist_ok=True)
+    print(f"   ✅ 创建报销单目录: {NEW_REIMB_NAME}")
+
+    # 3. 移动报销单 xlsx 文件
+    moved_count = 0
+    if os.path.exists(new_trip_dir):
+        for year_folder in sorted(os.listdir(new_trip_dir)):
+            year_path = os.path.join(new_trip_dir, year_folder)
+            if not os.path.isdir(year_path) or '年' not in year_folder:
+                continue
+            for month_folder in sorted(os.listdir(year_path)):
+                month_path = os.path.join(year_path, month_folder)
+                if not os.path.isdir(month_path) or '月' not in month_folder:
+                    continue
+                # 扫描行程文件夹中的报销单 xlsx
+                for item in os.listdir(month_path):
+                    item_path = os.path.join(month_path, item)
+                    if not os.path.isdir(item_path):
+                        continue
+                    for fname in os.listdir(item_path):
+                        if fname.endswith('-报销单.xlsx') or fname.endswith('-报销单.xls'):
+                            src = os.path.join(item_path, fname)
+                            # 目标: 03 报销单/年/月/
+                            dest_dir = os.path.join(new_reimb_dir, year_folder, month_folder)
+                            os.makedirs(dest_dir, exist_ok=True)
+                            dest = os.path.join(dest_dir, fname)
+                            try:
+                                shutil.move(src, dest)
+                                moved_count += 1
+                                print(f"   ✅ 移动报销单: {fname} → {NEW_REIMB_NAME}/{year_folder}/{month_folder}/")
+                            except Exception as e:
+                                print(f"   ⚠️ 移动失败: {fname} - {e}")
+
+    print(f"   📊 共移动 {moved_count} 个报销单文件")
+
+    # 4. 更新 config.py
+    new_content = content.replace(OLD_NAME, NEW_TRIP_NAME)
+
+    # 追加 REIMBURSEMENT_BASE_REL 和 REIMBURSEMENT_ROOT（如果不存在）
+    if 'REIMBURSEMENT_BASE_REL' not in new_content:
+        # 在 TRIP_BASE_REL 行后追加
+        new_content = new_content.replace(
+            f'TRIP_BASE_REL = "个人行程与报销/{NEW_TRIP_NAME}"',
+            f'TRIP_BASE_REL = "个人行程与报销/{NEW_TRIP_NAME}"\n\n# 报销单目录相对路径\nREIMBURSEMENT_BASE_REL = "个人行程与报销/{NEW_REIMB_NAME}"'
+        )
+    if 'REIMBURSEMENT_ROOT' not in new_content:
+        # 在 TRIP_ROOT 行后追加
+        new_content = new_content.replace(
+            f'TRIP_ROOT = "{new_trip_root}"',
+            f'TRIP_ROOT = "{new_trip_root}"\n\n# 报销单根目录（报销单生成用）\nREIMBURSEMENT_ROOT = "{new_reimb_root}"'
+        )
+
+    try:
+        with open(config_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+        print(f"   ✅ config.py 路径已更新")
+    except Exception as e:
+        return False, f"更新 config.py 失败: {e}"
+
+    return True, f"目录拆分迁移完成: {OLD_NAME} → {NEW_TRIP_NAME} + {NEW_REIMB_NAME}（移动 {moved_count} 个报销单）"
+
+
 def check_migration_needed():
     """检测是否需要数据迁移
 
@@ -535,4 +680,9 @@ if __name__ == '__main__':
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
+        # 先执行目录名迁移
+        migrate_directory_name(dry_run=dry_run)
+        # 再执行行程/报销单拆分迁移
+        migrate_trip_reimbursement_split(dry_run=dry_run)
+        # 最后执行文件重命名
         scan_and_rename(dry_run=dry_run)

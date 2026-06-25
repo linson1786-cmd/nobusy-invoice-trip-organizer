@@ -225,7 +225,8 @@ def generate_config_py(vault_path, skill_version=None):
         skill_version = _read_version()
     """生成 config.py 内容"""
     invoice_base = os.path.join(vault_path, SKILL_NAME, "01 文件识别整理")
-    trip_base = os.path.join(vault_path, SKILL_NAME, "02 行程与员工报销单")
+    trip_base = os.path.join(vault_path, SKILL_NAME, "02 行程")
+    reimbursement_base = os.path.join(vault_path, SKILL_NAME, "03 报销单")
 
     content = f'''"""
 配置文件 - 个人行程与报销
@@ -244,6 +245,10 @@ SKILL_VERSION = "{skill_version}"
 # 当 SKILL_VERSION > LAST_MIGRATION_VERSION 时，升级流程会自动检测是否需要数据迁移
 LAST_MIGRATION_VERSION = "{skill_version}"
 
+# ========== 刷新版本（记录上次完整刷新的版本，由 refresh.py 自动更新）==========
+# 当 SKILL_VERSION > LAST_REFRESH_VERSION 时，刷新会自动重新识别 03 已完成 文件
+LAST_REFRESH_VERSION = "{skill_version}"
+
 # ========== 路径配置 ==========
 
 # 项目根目录（个人行程与报销 的父目录）
@@ -252,8 +257,11 @@ OBSIDIAN_VAULT = "{vault_path}"
 # 01 文件识别整理相对路径
 INVOICE_BASE_REL = "个人行程与报销/01 文件识别整理"
 
-# 行程与报销单相对路径
-TRIP_BASE_REL = "个人行程与报销/02 行程与员工报销单"
+# 行程目录相对路径
+TRIP_BASE_REL = "个人行程与报销/02 行程"
+
+# 报销单目录相对路径
+REIMBURSEMENT_BASE_REL = "个人行程与报销/03 报销单"
 
 # ===== 脚本实际使用的路径变量 =====
 
@@ -267,6 +275,9 @@ LOG_FILE = BASE_ROOT + "/.organizer_log.json"
 # 行程根目录（trip脚本用）
 INVOICE_ROOT = BASE_ROOT
 TRIP_ROOT = "{trip_base}"
+
+# 报销单根目录（报销单生成用）
+REIMBURSEMENT_ROOT = "{reimbursement_base}"
 
 # 报销单 Excel 模板路径（如有模板则填写，否则留空）
 REIMBURSEMENT_TEMPLATE = ""
@@ -561,14 +572,21 @@ def do_init(vault_path=None):
         os.path.join(base_dir, "01 文件识别整理", "01 待分类"),
         os.path.join(base_dir, "01 文件识别整理", "02 待核实"),
         os.path.join(base_dir, "01 文件识别整理", "03 已完成"),
-        os.path.join(base_dir, "02 行程与员工报销单"),
-        os.path.join(base_dir, "02 行程与员工报销单", f"{current_year} 年"),
+        os.path.join(base_dir, "02 行程"),
+        os.path.join(base_dir, "02 行程", f"{current_year} 年"),
+        os.path.join(base_dir, "03 报销单"),
+        os.path.join(base_dir, "03 报销单", f"{current_year} 年"),
         os.path.join(base_dir, "scripts"),
     ]
-    # 12 个月子目录
+    # 12 个月子目录（行程）
     for m in range(1, 13):
         dirs_to_create.append(
-            os.path.join(base_dir, "02 行程与员工报销单", f"{current_year} 年", f"{m} 月")
+            os.path.join(base_dir, "02 行程", f"{current_year} 年", f"{m} 月")
+        )
+    # 12 个月子目录（报销单）
+    for m in range(1, 13):
+        dirs_to_create.append(
+            os.path.join(base_dir, "03 报销单", f"{current_year} 年", f"{m} 月")
         )
 
     created = 0
@@ -593,7 +611,7 @@ def do_init(vault_path=None):
          get_ledger_md_content()),
         (os.path.join(base_dir, "总台账.md"),
          get_total_ledger_md_content()),
-        (os.path.join(base_dir, "02 行程与员工报销单", f"{current_year} 年", "行程总览.md"),
+        (os.path.join(base_dir, "02 行程", f"{current_year} 年", "行程总览.md"),
          get_trip_overview_md_content()),
     ]
     for path, content in md_files:
@@ -682,7 +700,8 @@ def do_init(vault_path=None):
     print(f"  │   ├── 01 待分类/     ← 放入新发票")
     print(f"  │   ├── 02 待核实/     ← 脚本无法识别的文件")
     print(f"  │   └── 03 已完成/     ← 已整理归档")
-    print(f"  ├── 02 行程与员工报销单/{current_year} 年/")
+    print(f"  ├── 02 行程/{current_year} 年/")
+    print(f"  ├── 03 报销单/{current_year} 年/")
     print(f"  ├── scripts/           ← 脚本和配置")
     print(f"  ├── SOP-发票文件命名标准.md")
     print(f"  └── 总台账.md")
