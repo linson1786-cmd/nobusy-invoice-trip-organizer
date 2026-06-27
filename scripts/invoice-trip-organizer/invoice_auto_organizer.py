@@ -1759,11 +1759,30 @@ def _clean_filename_for_classify(filename):
     return '_'.join(segments) + '.' + ext
 
 
+# V1.0.55: 普通文件二级分类 — 精确关键词 ≥3 匹配，防止单关键词误判
+_ORDINARY_CHECKOUT_MARKERS = ["酒店", "结账单", "房号", "入住日期", "离店日期", "水单", "入离日期"]
+_ORDINARY_FLIGHT_MARKERS = ["直飞", "单程", "机建燃油", "托运行李", "航空"]
+
+
+def _classify_ordinary_file(s):
+    """普通文件二级分类：≥3 关键词才判定，提高准确性"""
+    if sum(1 for m in _ORDINARY_CHECKOUT_MARKERS if m in s) >= 3:
+        return "结账单"
+    if sum(1 for m in _ORDINARY_FLIGHT_MARKERS if m in s) >= 3:
+        return "机票比价图"
+    return None
+
+
 def classify(text, filename):
     """返回基础类别（不含子类型），用于流程逻辑判断"""
     s = (text or "") + _clean_filename_for_classify(filename)
     # V1.0.51: 真发票（含法定特征词）跳过比价图规则，防止通用词抢匹配
     is_real_invoice = sum(1 for marker in STRICT_INVOICE_MARKERS if marker in s) >= 3
+    # V1.0.55: 普通文件二级分类 — ≥3关键词精确匹配
+    if not is_real_invoice:
+        cat = _classify_ordinary_file(s)
+        if cat:
+            return cat
     for keywords, cat in CATEGORY_RULES:
         if "比价图" in cat and is_real_invoice:
             continue
