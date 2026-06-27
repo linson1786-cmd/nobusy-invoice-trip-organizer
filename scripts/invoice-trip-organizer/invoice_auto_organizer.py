@@ -1761,7 +1761,7 @@ def _clean_filename_for_classify(filename):
 
 # V1.0.55: 普通文件二级分类 — 精确关键词 ≥3 匹配，防止单关键词误判
 _ORDINARY_CHECKOUT_MARKERS = ["酒店", "结账单", "房号", "入住日期", "离店日期", "水单", "入离日期"]
-_ORDINARY_FLIGHT_MARKERS = ["直飞", "单程", "机建燃油", "托运行李", "航空"]
+_ORDINARY_FLIGHT_MARKERS = ["直飞", "单程", "机建燃油", "托运行李", "航空", "经济舱", "机场", "航班"]
 
 
 def _classify_ordinary_file(s):
