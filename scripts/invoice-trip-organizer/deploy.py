@@ -512,6 +512,15 @@ def _do_deploy_from(source_root, source_scripts_dir, target_label=""):
         shutil.copy2(config_template_src, config_dst)
         updated.append("config.py (从模板创建)")
 
+    # V1.0.37: 清理 __pycache__ — 升级后强制重新编译，避免加载旧 .pyc 缓存
+    pycache_dir = os.path.join(DEPLOY_SCRIPTS, "__pycache__")
+    if os.path.isdir(pycache_dir):
+        try:
+            shutil.rmtree(pycache_dir)
+            print(f"  🧹 已清理 __pycache__/（强制下次运行使用最新代码）")
+        except Exception:
+            pass
+
     # 输出结果
     action = f"升级({target_label})" if target_label else "部署"
     print(f"\n  {action}完成:")

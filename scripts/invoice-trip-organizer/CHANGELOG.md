@@ -1,5 +1,21 @@
 # 版本变更日志
 
+## 1.0.37 - 2026-06-27
+
+### 修复
+
+- **`__pycache__` 缓存导致升级后旧代码仍生效** 🔴
+  - 问题：`deploy.py --upgrade` 和 `version_manager.py` 更新了 `.py` 源文件，但 Python 加载的是 `__pycache__/` 中的旧 `.pyc` 字节码缓存，导致用户升级后分类逻辑等关键变更"看起来没生效"
+  - 实际案例：V1.0.36 修复了高铁比价图分类规则，但用户升级后重新识别仍被误判为"机票比价图"，根因就是 `.pyc` 缓存
+  - 修复：`deploy.py` 和 `version_manager.py` 在复制完新文件后，自动 `shutil.rmtree(__pycache__)`，强制下次运行重新编译
+
+### 变更文件
+
+- `deploy.py`：`_do_deploy_from()` 中新增 `__pycache__` 清理步骤
+- `version_manager.py`：`auto_update()` 中新增 `__pycache__` 清理步骤
+- `VERSION`：1.0.36 → 1.0.37
+- `CHANGELOG.md`：新增 1.0.37 条目
+
 ## 1.0.36 - 2026-06-25
 
 ### 修复（7个 Bug 修复，基于 Mia V1.0.35 反馈报告）

@@ -334,6 +334,14 @@ def auto_update(config_path, user_scripts_dir=None, silent=False):
             except Exception:
                 pass
 
+    # V1.0.37: 清理 __pycache__ — 更新后强制重新编译，避免加载旧 .pyc 缓存
+    pycache_dir = os.path.join(user_scripts_dir, "__pycache__")
+    if os.path.isdir(pycache_dir):
+        try:
+            shutil.rmtree(pycache_dir)
+        except Exception:
+            pass
+
     # 3. 更新 docs/ 目录（如果 Skill 中有）
     skill_docs_dir = os.path.join(os.path.dirname(SKILL_SCRIPTS_DIR), "docs")
     user_docs_dir = os.path.join(os.path.dirname(user_scripts_dir), "docs")
