@@ -80,6 +80,16 @@ STANDARD_NAME_RE = re.compile(
     r'(\.\w+)$'
 )
 
+# V1.0.58: 比价图文件名正则（无金额字段）
+# 格式: YYYY-MM-DD_比价图类别[_路线][_接收航变]_MMDD_WB_NNN.ext
+COMPARISON_NAME_RE = re.compile(
+    r'^(\d{4}-\d{2}-\d{2})_(' + '|'.join(re.escape(c) for c in VALID_CATEGORIES if '比价图' in c) + r')'
+    r'(?:_([^_\d]+(?:-[^_\d]+)?))?'    # Optional route
+    r'(?:_(\d{4})_(WB|YB))?'            # Optional status
+    r'(?:_(\d{3}))?'                    # Optional seq
+    r'(\.\w+)$'
+)
+
 # 报销单模板路径
 TEMPLATE_XLSX = globals().get("REIMBURSEMENT_TEMPLATE", "")
 
@@ -288,14 +298,24 @@ def scan_done_invoices(start_date, end_date):
 
         for fname in sorted(os.listdir(month_path)):
             m = STANDARD_NAME_RE.match(fname)
-            if not m:
-                continue
-            inv_date = m.group(1)
-            category = m.group(2)
-            amount = m.group(3)
-            route = m.group(4) or ""
-            suffix = m.group(5) or ""
-            ext = m.group(6)
+            if m:
+                inv_date = m.group(1)
+                category = m.group(2)
+                amount = m.group(3)
+                route = m.group(4) or ""
+                suffix = m.group(5) or ""
+                ext = m.group(6)
+            else:
+                # V1.0.58: 尝试匹配比价图（无金额字段）
+                m2 = COMPARISON_NAME_RE.match(fname)
+                if not m2:
+                    continue
+                inv_date = m2.group(1)
+                category = m2.group(2)
+                amount = "0.00"
+                route = m2.group(3) or ""
+                suffix = ""
+                ext = m2.group(4)
 
             # 日期范围匹配
             try:
@@ -518,7 +538,7 @@ def check_invoice_completeness(matched, route_list, start_date, end_date):
     accommodation = [i for i in matched if i['subdir'] == '住宿']
     days = (datetime.strptime(end_date, '%Y-%m-%d') - datetime.strptime(start_date, '%Y-%m-%d')).days
     if days > 1 and len(accommodation) == 0:
-        issues.append("⚠️ 无住宿发票（{days}天出差应有住宿）")
+        issues.append(f"⚠️ 无住宿发票（{days}天出差应有住宿）")
 
     # 检查城际交通数量
     # 简单判断：N个城市至少需要N-1段交通

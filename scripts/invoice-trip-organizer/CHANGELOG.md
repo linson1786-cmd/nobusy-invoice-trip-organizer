@@ -1,5 +1,25 @@
 # 版本变更日志
 
+## 1.0.58 - 2026-06-28
+
+### 修复（3项）
+
+- **比价图文件从不复制到行程** 🔴 P0
+  - 新增 `COMPARISON_NAME_RE` 正则（无金额字段）
+  - `scan_done_invoices()` 增加比价图文件名二级匹配
+  - 修复后：机票/高铁/住宿比价图文件正常复制到行程附件目录
+
+- **f-string 格式化错误** 🟢 P2
+  - `check_invoice_completeness()` 住宿缺失提示修复 `f` 前缀
+
+- **config.py 已就绪** ✅
+  - `VALID_CATEGORIES`/`CAT_TO_SUBDIR`/`NON_REIMBURSE` 已包含比价图类别
+
+### 变更文件
+
+- `trip_auto_organizer.py`：新增 COMPARISON_NAME_RE + scan_done_invoices 比价图匹配 + f-string
+- `VERSION` / `CHANGELOG.md` / `SKILL.md`：版本三件套更新
+
 ## 1.0.57 - 2026-06-28
 
 ### 新增
