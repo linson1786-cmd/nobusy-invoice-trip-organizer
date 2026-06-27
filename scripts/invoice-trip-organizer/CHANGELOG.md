@@ -1,5 +1,51 @@
 # 版本变更日志
 
+## 1.0.36 - 2026-06-25
+
+### 修复（7个 Bug 修复，基于 Mia V1.0.35 反馈报告）
+
+- **Bug 1: OTA截图金额误识别（OCR数字粘连）** 🔴
+  - 问题：OCR把并排价格读成天文数字（如 `¥1290 ¥6020` → `¥142032`）
+  - 修复：金额提取后加合理性校验，个人差旅单张 > ¥50,000 标记待核实
+  - 所有比价图金额提取函数上限从 100000 改为 50000
+
+- **Bug 2: 机票关键词缺失 → 全归"其他"** 🔴
+  - 问题：携程截图含"经济舱""机建燃油""票价""托运"，但机票关键词列表缺失
+  - 修复：补充这4个高频OTA词到机票关键词列表
+
+- **Bug 3: 充电费优先级高于机票** 🟡
+  - 问题：CATEGORY_RULES 中充电费排在机票前面，"充电宝禁止携带" → 匹配"充电"
+  - 修复：① 机票规则提到充电费之前 ② 充电费关键词移除"充电"，仅保留"充电费"精确匹配
+  - "充电宝禁止携带"不再误触发充电费分类
+
+- **Bug 4: PDF酒店水单被误拒** 🟡
+  - 问题：维也纳酒店水单PDF被 `has_invoice_markers()` 拦截（无发票特征词）
+  - 修复：① INVOICE_CONTENT_MARKERS 增加水单特征词（水单/入离日期/入住人/酒店名称/房费/携程订单/预订确认/订单号/入住日期）
+  - ② 增加 fallback：金额+日期都提取成功时即使无发票特征词也放行
+
+- **Bug 5: 19张金额提取失败** 🟡
+  - 问题：OTA价格格式 `¥1290起`（"起"后缀）和 `¥xxx+¥yyy`（复合价格）正则不匹配
+  - 修复：① 所有金额正则增加 `起` 后缀过滤 ② 新增复合价格支持（取两个金额之和）
+  - 覆盖 extract_amount_from_text / extract_amount_for_flight_comparison / extract_amount_for_train_comparison / extract_amount_for_hotel_comparison
+
+- **Bug 6: 刷新≠文件识别功能混淆** 🟢
+  - 问题：用户执行"刷新"期望02待核实被重处理，但refresh.py只更新台账和总览
+  - 修复：refresh.py 开头检测02待核实是否有文件 > 0，有则提示用户先跑文件识别
+
+- **Bug 7: deploy.py SKILL_VERSION不更新** 🟢
+  - 问题：`deploy.py --upgrade` 成功后 config.py 中 SKILL_VERSION 仍为旧版本号
+  - 修复：`_do_deploy_from()` 中新增 `_update_skill_version()` 和 `_update_refresh_version_in_deploy()` 调用
+  - 升级后自动更新 config.py 中的 SKILL_VERSION 和 LAST_REFRESH_VERSION
+
+### 变更文件
+
+- `invoice_auto_organizer.py`：CATEGORY_RULES 重排+关键词补充、INVOICE_CONTENT_MARKERS 补充水单词、金额合理性校验、OTA价格格式支持
+- `config.py`：CATEGORY_RULES 同步重排+关键词补充
+- `deploy.py`：新增 `_update_skill_version()` / `_update_refresh_version_in_deploy()` 函数
+- `refresh.py`：新增 02待核实 文件检测提示
+- `VERSION`：1.0.35 → 1.0.36
+- `CHANGELOG.md`：新增 1.0.36 条目
+
 ## 1.0.35 - 2026-06-25
 
 ### 新增

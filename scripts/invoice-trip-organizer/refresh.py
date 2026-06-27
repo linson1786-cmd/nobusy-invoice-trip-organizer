@@ -168,6 +168,18 @@ def main():
     print("=" * 60)
     print()
 
+    # V1.0.36 Bug 6: 检测 02 待核实 是否有文件，提示用户先跑文件识别
+    review_dir = os.path.join(getattr(config, 'BASE_ROOT', ''), '02 待核实')
+    if os.path.isdir(review_dir):
+        review_files = [f for f in os.listdir(review_dir)
+                        if not f.startswith('.') and os.path.isfile(os.path.join(review_dir, f))]
+        if review_files:
+            print(f"⚠️  02 待核实/ 中有 {len(review_files)} 个文件未处理！")
+            print(f"   刷新命令只更新台账和行程总览，不会重新识别 02 待核实 中的文件。")
+            print(f"   如需重新识别这些文件，请先运行「文件识别」命令。")
+            print(f"   示例文件: {review_files[0][:50]}{'...' if len(review_files[0])>50 else ''}")
+            print()
+
     # ===== Phase 0: 目录名迁移 =====
     print("[Phase 0] 目录名迁移检查")
     print("-" * 50)

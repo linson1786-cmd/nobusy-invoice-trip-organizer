@@ -175,13 +175,17 @@ if 'CATEGORY_RULES' not in dir():
           "日用杂品", "日用品", "日化用品", "礼盒", "水果", "玩具",
           "移动通信设备", "通讯器材", "通讯器材及配件"], "礼品"),
         (["高速", "通行费", "车辆通行", "路桥费", "收费站", "ETC", "高速费"], "高速费"),
-        (["充电", "蔚来", "NIO", "换电", "充电桩", "充电费"], "充电费"),
+        # V1.0.36 Bug 3: 机票提到充电费之前（OTA截图是最高频场景）
+        # V1.0.36 Bug 2: 补充"经济舱""机建燃油""票价""托运"高频OTA词
+        (["机票", "航空", "航班", "登机牌", "CA ", "CZ ", "MU ", "HU ",
+          "保险服务", "航意航延组合险标准计划", "经纪代理服务", "退票费",
+          "经济舱", "机建燃油", "票价", "托运"], "机票"),
+        # V1.0.36 Bug 3: "充电"已改为"充电费"精确匹配，排除"充电宝禁止携带"
+        (["充电费", "蔚来", "NIO", "换电", "充电桩"], "充电费"),
         (["加油", "汽油", "柴油", "中石化", "中石油", "中海油", "壳牌",
           "油品", "燃油费", "加油站", "供电", "电费", "充电服务"], "油电类"),
         (["滴滴", "打车", "网约车", "交通运输服务", "客运服务费"], "滴滴打车"),
         (["火车票", "高铁", "车票", "C3775", "二等座", "铁路", "电子客票", "一等座"], "高铁"),
-        (["机票", "航空", "航班", "登机牌", "CA ", "CZ ", "MU ", "HU ",
-          "保险服务", "航意航延组合险标准计划", "经纪代理服务", "退票费"], "机票"),
         (["招待", "餐饮", "餐费", "就餐", "餐厅", "饭店", "酒家", "饮食", "菜品",
           "江鱼儿", "晶晶", "酒", "白酒", "洋酒", "红酒", "啤酒", "酒水"], "餐饮"),
     ]
@@ -687,31 +691,45 @@ def extract_amount_for_flight_comparison(text):
     3. 再降级：机场燃油/机建燃油/燃油附加费金额（仅总价提取不到时用）
     """
     # 1. 总价标签优先 — OTA 截图底部总价
+    # V1.0.36 Bug 5: 过滤"起"后缀
     total_indicators = ['同意付款', '合计', '应付总价', '订单总价', '应付', '总价',
                         '实付', '需付', '支付金额', '票价总额', '机票总价']
     for indicator in total_indicators:
-        m = re.search(rf'{indicator}[\s\S]{{0,30}}?[¥￥]\s*([\d,]+\\.?\d{{0,2}})', text)
+        m = re.search(rf'{indicator}[\s\S]{{0,30}}?[¥￥]\s*([\d,]+\.?\d{{0,2}})起?', text)
         if m:
-            val = float(m.group(1).replace(',', ''))
-            if 10 < val < 100000:
+            val = float(m.group(1).replace(',', '').rstrip('起'))
+            if 10 < val <= 50000:  # V1.0.36 Bug 1: 上限改为50000
                 return f"{val:.2f}", f"总价标签({indicator})"
 
     # 2. 降级：图片中所有金额取最大（通常是机票总价）
-    amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)', text)
+    # V1.0.36 Bug 1: 上限改为50000，过滤OCR粘连天文数字
+    amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)起?', text)
     if amounts:
         nums = []
         for a in amounts:
-            a = a.replace(',', '').strip()
+            a = a.replace(',', '').strip().rstrip('起')
             if not a:
                 continue
             try:
                 val = float(a)
-                if 10 < val < 100000:  # 过滤过小(<10)和过大(身份证/电话)数字
+                if 10 < val <= 50000:  # 过滤过小(<10)和过大(OCR粘连)数字
                     nums.append(val)
             except ValueError:
                 continue
         if nums:
             return f"{max(nums):.2f}", "图片最大金额"
+
+    # V1.0.36 Bug 5: 支持 ¥xxx+¥yyy 复合价格（OTA截图格式）
+    m = re.search(r'[¥￥]\s*([\d,]+\.?\d{0,2})\s*[+＋]\s*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+    if m:
+        try:
+            v1 = float(m.group(1).replace(',', ''))
+            v2 = float(m.group(2).replace(',', ''))
+            total = v1 + v2
+            if 10 < total <= 50000:
+                return f"{total:.2f}", "复合价格(¥xxx+¥yyy)"
+        except:
+            pass
 
     # 3. 再降级：机场燃油/机建燃油费金额（仅总价提取不到时用）
     m = re.search(r'(?:机场|机建)燃油[费]*[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
@@ -904,16 +922,17 @@ def extract_amount_for_train_comparison(text):
                 return f"{val:.2f}", seat
 
     # 3. 降级：图片中所有金额取最大
-    amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)', text)
+    # V1.0.36 Bug 1: 上限改为50000
+    amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)起?', text)
     if amounts:
         nums = []
         for a in amounts:
-            a = a.replace(',', '').strip()
+            a = a.replace(',', '').strip().rstrip('起')
             if not a:
                 continue
             try:
                 val = float(a)
-                if 10 < val < 100000:
+                if 10 < val <= 50000:
                     nums.append(val)
             except ValueError:
                 continue
@@ -985,32 +1004,34 @@ def extract_amount_for_hotel_comparison(text):
     3. 降级：图片中所有金额取最大
     """
     # 1. 总价/总额/订单金额/实付 + ¥金额
+    # V1.0.36 Bug 5: 过滤"起"后缀 + 上限50000
     for label in ['总价', '总额', '订单金额', '实付', '付款金额', '合计']:
-        m = re.search(label + r'[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+        m = re.search(label + r'[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})起?', text)
         if m:
-            val = float(m.group(1).replace(',', ''))
-            if 0 < val < 100000:
+            val = float(m.group(1).replace(',', '').rstrip('起'))
+            if 0 < val <= 50000:
                 return f"{val:.2f}", label
 
     # 2. 每晚/房费 + ¥金额
     for label in ['每晚', '房费', '均价', '日均价']:
-        m = re.search(label + r'[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})', text)
+        m = re.search(label + r'[\s：:]*[¥￥]?\s*([\d,]+\.?\d{0,2})起?', text)
         if m:
-            val = float(m.group(1).replace(',', ''))
-            if 0 < val < 10000:
+            val = float(m.group(1).replace(',', '').rstrip('起'))
+            if 0 < val <= 50000:
                 return f"{val:.2f}", label
 
     # 3. 降级：图片中所有金额取最大
-    amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)', text)
+    # V1.0.36 Bug 1: 上限改为50000
+    amounts = re.findall(r'[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)起?', text)
     if amounts:
         nums = []
         for a in amounts:
-            a = a.replace(',', '').strip()
+            a = a.replace(',', '').strip().rstrip('起')
             if not a:
                 continue
             try:
                 val = float(a)
-                if 10 < val < 100000:
+                if 10 < val <= 50000:
                     nums.append(val)
             except ValueError:
                 continue
@@ -1506,15 +1527,30 @@ def extract_amount_from_text(text):
     if m:
         return m.group(1).replace(',', '')
     # 策略5: ¥金额取最大（支持整数和小数）
-    amounts = re.findall(r'[¥￥]\s*' + _amt, text)
+    # V1.0.36 Bug 5: 过滤"起"后缀（如 ¥1290起），取数字部分
+    # V1.0.36 Bug 5: 过滤 >50000 的天文数字（OCR粘连导致）
+    amounts = re.findall(r'[¥￥]\s*' + _amt + r'起?', text)
     if amounts:
-        nums = [float(a.replace(',', '')) for a in amounts]
-        return f"{max(nums):.2f}"
-    # 策略5b: 总价/订单金额/票价 + 整数或小数（预订截图等非发票文件）
-    m = re.search(r'(?:总价|订单金额|票价|总金额|合计金额|实付)[：:\s]*[¥￥]?\s*' + _amt, text)
+        nums = [float(a.replace(',', '').rstrip('起')) for a in amounts]
+        nums = [n for n in nums if 1 <= n <= 50000]  # 过滤异常值
+        if nums:
+            return f"{max(nums):.2f}"
+    # V1.0.36 Bug 5: 支持 ¥xxx+¥yyy 复合价格（OTA截图格式）
+    m = re.search(r'[¥￥]\s*' + _amt + r'\s*[+＋]\s*[¥￥]?\s*' + _amt, text)
     if m:
-        val = float(m.group(1).replace(',', ''))
-        if val > 0:
+        try:
+            v1 = float(m.group(1).replace(',', ''))
+            v2 = float(m.group(2).replace(',', ''))
+            total = v1 + v2
+            if 1 <= total <= 50000:
+                return f"{total:.2f}"
+        except:
+            pass
+    # 策略5b: 总价/订单金额/票价 + 整数或小数（预订截图等非发票文件）
+    m = re.search(r'(?:总价|订单金额|票价|总金额|合计金额|实付)[：:\s]*[¥￥]?\s*' + _amt + r'起?', text)
+    if m:
+        val = float(m.group(1).replace(',', '').rstrip('起'))
+        if 1 <= val <= 50000:
             return f"{val:.2f}"
     # 策略6: 消费合计（结账单，多行分隔）
     m = re.search(r'消费合计[\s\n]*' + _amt, text)
@@ -1598,6 +1634,9 @@ INVOICE_CONTENT_MARKERS = [
     "结账单", "住宿费", "通行费", "消费合计", "小写",
     "收款人", "复核人", "开票人", "销售方", "购买方",
     " Invoice", "Receipt", "Tax",
+    # V1.0.36 Bug 4: 酒店水单/预订确认单特征词
+    "水单", "入离日期", "入住人", "酒店名称", "房费", "携程订单",
+    "预订确认", "订单号", "入住日期",
 ]
 
 
@@ -2799,14 +2838,26 @@ def process_inbox():
         # 机票比价图/高铁比价图/住宿比价图是截图不是发票，跳过此检查
         # 图片（截图/拍照）也跳过此检查：has_invoice_markers 是为过滤非发票 PDF 设计的，
         # OTA 比价截图虽无发票特征词但仍有归档价值
+        # V1.0.36 Bug 4: 金额+日期都提取成功时也放行（酒店水单/预订确认单等）
         if cat not in ("机票比价图", "高铁比价图", "住宿比价图") and not is_image and not has_invoice_markers(text):
-            move_to_review(src, f, "非发票内容(无发票特征词)")
-            continue
+            if not (date and amount):
+                move_to_review(src, f, "非发票内容(无发票特征词)")
+                continue
         try:
             amount = f"{float(amount.replace(',','')):.2f}"
         except:
             move_to_review(src, f, "金额格式异常")
             continue
+
+        # V1.0.36 Bug 1: 金额合理性校验 — OCR数字粘连导致天文数字
+        # 个人差旅单张 > ¥50,000 极不合理，标记待核实
+        try:
+            amt_val = float(amount)
+            if amt_val > 50000:
+                move_to_review(src, f, f"金额异常(¥{amount} > ¥50000，疑似OCR粘连)")
+                continue
+        except:
+            pass
 
         # 通用去重: 无发票号时用 date+cat_label+amount 匹配 03 已完成
         # 放在日期调整之后，确保用最终归档日期匹配

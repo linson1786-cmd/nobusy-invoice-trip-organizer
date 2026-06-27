@@ -570,6 +570,13 @@ def _do_deploy_from(source_root, source_scripts_dir, target_label=""):
     # ===== 数据迁移检测 =====
     migration_result = check_data_migration(new_version, old_ver)
 
+    # V1.0.36 Bug 7: 升级后更新 config.py 中的 SKILL_VERSION
+    config_path = os.path.join(DEPLOY_SCRIPTS, "config.py")
+    _update_skill_version(config_path, new_version)
+
+    # 同时更新 LAST_REFRESH_VERSION（升级后需要重新识别）
+    _update_refresh_version_in_deploy(config_path, new_version)
+
     if failed and not updated:
         return False, f"{action}失败: {', '.join(failed[:3])}"
     elif failed:
@@ -701,6 +708,48 @@ def _update_migration_version(config_path, version):
             new_content = re.sub(
                 r'^LAST_MIGRATION_VERSION\s*=\s*"[^"]*"',
                 f'LAST_MIGRATION_VERSION = "{version}"',
+                content,
+                flags=re.MULTILINE
+            )
+            if new_content != content:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+    except Exception:
+        pass
+
+
+def _update_skill_version(config_path, version):
+    """V1.0.36 Bug 7: 更新 config.py 中的 SKILL_VERSION"""
+    if not os.path.exists(config_path):
+        return
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        if 'SKILL_VERSION' in content:
+            new_content = re.sub(
+                r'^SKILL_VERSION\s*=\s*"[^"]*"',
+                f'SKILL_VERSION = "{version}"',
+                content,
+                flags=re.MULTILINE
+            )
+            if new_content != content:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+    except Exception:
+        pass
+
+
+def _update_refresh_version_in_deploy(config_path, version):
+    """V1.0.36: 更新 config.py 中的 LAST_REFRESH_VERSION"""
+    if not os.path.exists(config_path):
+        return
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        if 'LAST_REFRESH_VERSION' in content:
+            new_content = re.sub(
+                r'^LAST_REFRESH_VERSION\s*=\s*"[^"]*"',
+                f'LAST_REFRESH_VERSION = "{version}"',
                 content,
                 flags=re.MULTILINE
             )
