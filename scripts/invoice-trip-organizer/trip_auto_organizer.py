@@ -391,36 +391,28 @@ def copy_invoices_to_trip(matched, trip_dir, clear_existing=False):
 def copy_dining_to_monthly(matched, year, month):
     """将餐饮类发票复制到月度餐饮目录（不放进行程文件夹）。
     目录结构: {TRIP_ROOT}/{year} 年/{month} 月/餐饮/
-    V1.0.59: 同步模式 — 删除月度餐饮目录中 03 已完成 已不存在的文件"""
+    V1.0.60: 清空重拷 — 先删除全部旧文件，再从 03 已完成 重新复制"""
     dining_items = [inv for inv in matched if inv['category'] == '餐饮']
+    year_dir = os.path.join(TRIP_ROOT, f"{year} 年")
+    month_dir = os.path.join(year_dir, f"{month} 月")
+    dining_dir = os.path.join(month_dir, "餐饮")
+
+    # V1.0.60: 清空重拷（统一同步逻辑）
+    if os.path.isdir(dining_dir):
+        for old_fn in os.listdir(dining_dir):
+            old_path = os.path.join(dining_dir, old_fn)
+            if os.path.isfile(old_path):
+                os.remove(old_path)
+        print(f"   🧹 已清空月度餐饮目录")
+
     if not dining_items:
         print(f"   ℹ️ 无餐饮类发票")
         return 0
 
-    year_dir = os.path.join(TRIP_ROOT, f"{year} 年")
-    month_dir = os.path.join(year_dir, f"{month} 月")
-    dining_dir = os.path.join(month_dir, "餐饮")
     os.makedirs(dining_dir, exist_ok=True)
-
-    # V1.0.59: 清理月度餐饮目录中的过期文件（03 已完成 已不存在）
-    valid_names = {inv['filename'] for inv in dining_items}
-    removed = 0
-    if os.path.isdir(dining_dir):
-        for existing_fn in os.listdir(dining_dir):
-            existing_path = os.path.join(dining_dir, existing_fn)
-            if os.path.isfile(existing_path) and existing_fn not in valid_names:
-                os.remove(existing_path)
-                removed += 1
-                print(f"   🧹 移除过期餐饮: {existing_fn}")
-    if removed:
-        print(f"   🧹 已清理 {removed} 张过期餐饮发票")
-
     copied = 0
     for inv in dining_items:
         dest = os.path.join(dining_dir, inv['filename'])
-        if os.path.exists(dest):
-            print(f"   ⏭️ 跳过已存在(餐饮): {inv['filename']}")
-            continue
         shutil.copy2(inv['src_path'], dest)
         copied += 1
         print(f"   📋 复制餐饮: {inv['filename']} → {month} 月/餐饮/")
