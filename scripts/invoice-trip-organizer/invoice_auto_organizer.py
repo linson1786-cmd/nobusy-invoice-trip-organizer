@@ -621,8 +621,8 @@ def extract_date_for_flight_comparison(text):
         if 1 <= mo <= 12 and 1 <= d <= 31:
             return f"{_year}-{mo:02d}-{d:02d}", "直飞月日"
 
-    # 3. 直飞 + 中文格式 (06月15日)
-    m = re.search(r'直飞[\s\n]*(\d{1,2})月(\d{1,2})日', text)
+    # 3. 直飞 + 中文格式 (06月15日 / 5 月 6 日 — OCR可能在数字和月日间加空格)
+    m = re.search(r'直飞[\s\n]*(\d{1,2})\s*月\s*(\d{1,2})\s*日', text)
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
         if 1 <= mo <= 12 and 1 <= d <= 31:
