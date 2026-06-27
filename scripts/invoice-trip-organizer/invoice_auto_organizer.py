@@ -698,6 +698,16 @@ def extract_date_for_flight_comparison(text):
         if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
             return f"{y}-{mo:02d}-{d:02d}", "单程完整日期"
 
+    # 9. V1.0.43: 兜底降级 — 比价页日期在价格网格中，无路线上下文
+    #    取文本中第一个有效 MM-DD（前面是非数字，后面是空格/换行/周X）
+    #    用 finditer 遍历所有匹配，避免单次 re.search 的贪婪回溯误匹配
+    for m in re.finditer(r'(?:^|\n|[^\d])(\d{1,2})[月\-/.](\d{1,2})(?!\d)', text):
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            # 检查前面的非数字字符 — 避免匹配到身份证号段、订单号等数字序列
+            prefix = text[m.start():m.start()+1]
+            return f"{_year}-{mo:02d}-{d:02d}", "兜底日期(第一个有效月日)"
+
     return None, "无航班日期"
 
 
@@ -1673,9 +1683,25 @@ def has_invoice_markers(text):
     return any(marker in text for marker in INVOICE_CONTENT_MARKERS)
 
 
+# V1.0.43: 文件名中的已知类别标签，防止 reprocess 时旧名污染分类
+CATEGORY_LABELS_IN_FILENAME = [cat for _, cat in CATEGORY_RULES] if 'CATEGORY_RULES' in dir() else [
+    "机票比价图", "高铁比价图", "住宿比价图", "结账单", "行程单", "住宿", "礼品",
+    "高速费", "充电费", "油电类", "滴滴打车", "高铁", "机票", "餐饮", "其他",
+    "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"
+]
+
+
+def _clean_filename_for_classify(filename):
+    """V1.0.43: 从文件名中移除已知类别标签，防止旧名污染分类"""
+    cleaned = filename
+    for label in CATEGORY_LABELS_IN_FILENAME:
+        cleaned = cleaned.replace(label, "")
+    return cleaned
+
+
 def classify(text, filename):
     """返回基础类别（不含子类型），用于流程逻辑判断"""
-    s = (text or "") + filename
+    s = (text or "") + _clean_filename_for_classify(filename)
     for keywords, cat in CATEGORY_RULES:
         for kw in keywords:
             if kw in s:
@@ -1693,7 +1719,7 @@ def classify_with_subtype(text, filename):
     - 结账单类 + 酒店/住宿关键词 → "住宿(结账单)"  (类别变更)
     """
     base_cat = classify(text, filename)
-    s = (text or "") + filename
+    s = (text or "") + _clean_filename_for_classify(filename)
     
     for base_cat_rule, keywords, subtype in SUBTYPE_RULES:
         if base_cat == base_cat_rule:
