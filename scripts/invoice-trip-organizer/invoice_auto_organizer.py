@@ -2827,13 +2827,15 @@ def process_inbox():
                         print(f"   🏨 无入住日期且无配对，使用开票日期={date}")
 
         # 机票比价图类：从"直飞"提取航班日期，从"机场燃油"提取金额
+        # V1.0.44: 日期提取失败时移入 02 待核实，不再使用通用日期凑合
         if cat == "机票比价图":
             flight_date, flight_source = extract_date_for_flight_comparison(text)
             if flight_date:
                 date = flight_date
                 print(f"   ✈️ 机票比价图航班日期={flight_date} (来源={flight_source})")
             else:
-                print(f"   ✈️ 无航班日期，使用提取日期={date}")
+                move_to_review(src, f, "机票比价图无法提取航班日期")
+                continue
             fuel_amount, fuel_source = extract_amount_for_flight_comparison(text)
             if fuel_amount:
                 amount = fuel_amount
@@ -2845,13 +2847,15 @@ def process_inbox():
                 print(f"   ✈️ 乘机人={passenger}")
 
         # 高铁比价图类：提取乘车日期和票价
+        # V1.0.44: 日期提取失败时移入 02 待核实，不再使用通用日期凑合
         if cat == "高铁比价图":
             train_date, train_source = extract_date_for_train_comparison(text)
             if train_date:
                 date = train_date
                 print(f"   🚄 高铁比价图乘车日期={train_date} (来源={train_source})")
             else:
-                print(f"   🚄 无乘车日期，使用提取日期={date}")
+                move_to_review(src, f, "高铁比价图无法提取乘车日期")
+                continue
             train_amount, train_amt_source = extract_amount_for_train_comparison(text)
             if train_amount:
                 amount = train_amount
@@ -2863,13 +2867,15 @@ def process_inbox():
                 print(f"   🚄 乘车人={passenger}")
 
         # 住宿比价图类：提取入住日期和房价
+        # V1.0.44: 日期提取失败时移入 02 待核实，不再使用通用日期凑合
         if cat == "住宿比价图":
             hotel_date, hotel_source = extract_date_for_hotel_comparison(text)
             if hotel_date:
                 date = hotel_date
                 print(f"   🏨 住宿比价图入住日期={hotel_date} (来源={hotel_source})")
             else:
-                print(f"   🏨 无入住日期，使用提取日期={date}")
+                move_to_review(src, f, "住宿比价图无法提取入住日期")
+                continue
             hotel_amount, hotel_amt_source = extract_amount_for_hotel_comparison(text)
             if hotel_amount:
                 amount = hotel_amount
