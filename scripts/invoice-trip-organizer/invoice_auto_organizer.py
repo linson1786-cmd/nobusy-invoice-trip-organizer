@@ -1674,24 +1674,37 @@ def extract_amount_from_filename(filename):
     return None
 
 
-# 发票内容特征词（用于判断 PDF 是否为发票/报销凭证）
-INVOICE_CONTENT_MARKERS = [
+# ===== V1.0.49: 文件类型预分类 — 发票 vs 普通文件 =====
+
+# 正式发票的严格特征词（含发票号/税号/销售方等法定要素）
+STRICT_INVOICE_MARKERS = [
     "发票号码", "发票代码", "开票日期", "价税合计", "机器编号",
-    "税号", "电子发票", "增值税", "行程报销单", "行程单",
-    "结账单", "住宿费", "通行费", "消费合计", "小写",
+    "税号", "电子发票", "增值税",
     "收款人", "复核人", "开票人", "销售方", "购买方",
     " Invoice", "Receipt", "Tax",
-    # V1.0.36 Bug 4: 酒店水单/预订确认单特征词
-    "水单", "入离日期", "入住人", "酒店名称", "房费", "携程订单",
-    "预订确认", "订单号", "入住日期",
 ]
 
+# 非发票但仍需归档的特征词（水单/预订/订单等）
+NON_INVOICE_MARKERS = [
+    "行程报销单", "行程单", "结账单", "住宿费", "通行费",
+    "消费合计", "小写",
+    "水单", "入离日期", "入住人", "酒店名称",
+    "携程订单", "预订确认", "订单号", "入住日期",
+]
 
-def has_invoice_markers(text):
-    """检查文本是否包含发票特征词，用于过滤非发票 PDF"""
+# 完整发票特征词（用于判断是否有归档价值）
+INVOICE_CONTENT_MARKERS = STRICT_INVOICE_MARKERS + NON_INVOICE_MARKERS
+
+
+def is_invoice_file(text, ext):
+    """V1.0.49: 判断是否为正式发票文件。
+    
+    正式发票：含发票号/税号/销售方等法定要素 → 走严格规则
+    普通文件：OTA截图/水单/预订确认/行程单 → 走宽松规则
+    """
     if not text:
-        return False
-    return any(marker in text for marker in INVOICE_CONTENT_MARKERS)
+        return ext.lower() == '.pdf'  # PDF默认按发票处理
+    return any(marker in text for marker in STRICT_INVOICE_MARKERS)
 
 
 # V1.0.43: 文件名中的已知类别标签，防止 reprocess 时旧名污染分类
@@ -1700,6 +1713,13 @@ CATEGORY_LABELS_IN_FILENAME = [cat for _, cat in CATEGORY_RULES] if 'CATEGORY_RU
     "高速费", "充电费", "油电类", "滴滴打车", "高铁", "机票", "餐饮",
     "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"
 ]
+
+
+def has_invoice_markers(text):
+    """检查文本是否包含发票/报销凭证特征词（含正式发票+非正式凭证）"""
+    if not text:
+        return False
+    return any(marker in text for marker in INVOICE_CONTENT_MARKERS)
 
 
 def _clean_filename_for_classify(filename):
@@ -2936,15 +2956,15 @@ def process_inbox():
             move_to_review(src, f, "无法提取金额")
             continue
 
-        # 发票内容校验：非发票 PDF（无发票特征词）移入待核实
-        # 机票比价图/高铁比价图/住宿比价图是截图不是发票，跳过此检查
-        # 图片（截图/拍照）也跳过此检查：has_invoice_markers 是为过滤非发票 PDF 设计的，
-        # OTA 比价截图虽无发票特征词但仍有归档价值
-        # V1.0.36 Bug 4: 金额+日期都提取成功时也放行（酒店水单/预订确认单等）
-        if cat not in ("机票比价图", "高铁比价图", "住宿比价图") and not is_image and not has_invoice_markers(text):
-            if not (date and amount):
-                move_to_review(src, f, "非发票内容(无发票特征词)")
+        # V1.0.49: 文件类型预分类 — 发票 vs 普通文件，不同校验标准
+        is_invoice = is_invoice_file(text, ext_lower)
+        
+        if is_invoice:
+            # 正式发票严格规则：必须含发票特征词
+            if not has_invoice_markers(text):
+                move_to_review(src, f, "正式发票缺少法定特征词(发票号码/税号/销售方)")
                 continue
+        # 普通文件（OTA截图/水单/预订确认等）：无需发票特征词，日期金额已通过上游校验
         try:
             amount = f"{float(amount.replace(',','')):.2f}"
         except:

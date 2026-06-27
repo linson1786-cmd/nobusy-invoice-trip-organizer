@@ -1,5 +1,28 @@
 # 版本变更日志
 
+## 1.0.49 - 2026-06-28
+
+### 新增
+
+- **文件类型预分类：发票 vs 普通文件** 📋
+  - 新增 `is_invoice_file()` 函数，分类前先判断文件性质
+  - **正式发票**（含发票号码/税号/销售方）：严格规则，必须通过 `has_invoice_markers()` 校验
+  - **普通文件**（OTA截图/水单/预订确认/行程单等）：宽松规则，不要求发票特征词
+  - INVOICE_CONTENT_MARKERS 拆分为 `STRICT_INVOICE_MARKERS` + `NON_INVOICE_MARKERS`
+
+### 设计原则
+
+```
+extract text → is_invoice_file(text, ext)
+  ├─ True  (正式发票) → 必须通过发票特征词校验
+  └─ False (普通文件) → 跳过特征词要求，按内容分类
+```
+
+### 变更文件
+
+- `invoice_auto_organizer.py`：新增 `is_invoice_file()` + `STRICT_INVOICE_MARKERS` + `NON_INVOICE_MARKERS` + 处理流程分支
+- `VERSION` / `CHANGELOG.md` / `SKILL.md`：版本三件套更新
+
 ## 1.0.48 - 2026-06-27
 
 ### 修复
