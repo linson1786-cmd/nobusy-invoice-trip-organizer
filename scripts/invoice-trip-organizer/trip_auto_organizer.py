@@ -388,25 +388,43 @@ def copy_invoices_to_trip(matched, trip_dir, clear_existing=False):
     return copied
 
 
-def copy_dining_to_monthly(matched, year, month):
-    """将餐饮类发票复制到月度餐饮目录（不放进行程文件夹）。
+def copy_dining_to_monthly(year, month):
+    """将整个月份的餐饮类发票复制到月度餐饮目录。
     目录结构: {TRIP_ROOT}/{year} 年/{month} 月/餐饮/
-    V1.0.60: 清空重拷 — 先删除全部旧文件，再从 03 已完成 重新复制"""
-    dining_items = [inv for inv in matched if inv['category'] == '餐饮']
+    V1.0.61: 扫描整个月份（不依赖行程 matched），确保所有餐饮发票都被复制"""
+    # 构造月份文件夹名
+    month_str = f"{int(month):02d}"
+    month_folder = f"{year}-{month_str}"
+    month_path = os.path.join(DONE_DIR, month_folder)
+
     year_dir = os.path.join(TRIP_ROOT, f"{year} 年")
-    month_dir = os.path.join(year_dir, f"{month} 月")
+    month_dir = os.path.join(year_dir, f"{int(month)} 月")
     dining_dir = os.path.join(month_dir, "餐饮")
 
-    # V1.0.60: 清空重拷（统一同步逻辑）
+    # 清空重拷
     if os.path.isdir(dining_dir):
         for old_fn in os.listdir(dining_dir):
             old_path = os.path.join(dining_dir, old_fn)
             if os.path.isfile(old_path):
                 os.remove(old_path)
-        print(f"   🧹 已清空月度餐饮目录")
+        print(f"   🧹 已清空 {int(month)} 月/餐饮/ 目录")
+
+    if not os.path.isdir(month_path):
+        print(f"   ℹ️ 03 已完成 中无 {month_folder} 目录")
+        return 0
+
+    # 扫描该月份所有餐饮发票
+    dining_items = []
+    for fname in sorted(os.listdir(month_path)):
+        m = STANDARD_NAME_RE.match(fname)
+        if m and m.group(2) == '餐饮':
+            dining_items.append({
+                'filename': fname,
+                'src_path': os.path.join(month_path, fname),
+            })
 
     if not dining_items:
-        print(f"   ℹ️ 无餐饮类发票")
+        print(f"   ℹ️ {int(month)} 月无餐饮类发票")
         return 0
 
     os.makedirs(dining_dir, exist_ok=True)
@@ -415,8 +433,8 @@ def copy_dining_to_monthly(matched, year, month):
         dest = os.path.join(dining_dir, inv['filename'])
         shutil.copy2(inv['src_path'], dest)
         copied += 1
-        print(f"   📋 复制餐饮: {inv['filename']} → {month} 月/餐饮/")
-    print(f"✅ 复制 {copied} 张餐饮发票到月度餐饮目录")
+        print(f"   📋 复制餐饮: {inv['filename']} → {int(month)} 月/餐饮/")
+    print(f"✅ 复制 {copied} 张餐饮发票到 {int(month)} 月/餐饮/")
     return copied
 
 
@@ -618,9 +636,14 @@ def main():
     if matched:
         copy_invoices_to_trip(matched, trip_dir, clear_existing=existing is not None)
 
-    # 4a. 餐饮类发票复制到月度餐饮目录（不放入行程文件夹）
+    # 4a. 餐饮类发票复制到月度餐饮目录（扫描整个月份，不依赖行程匹配）
+    dining_count = 0
     if matched:
-        copy_dining_to_monthly(matched, year, month)
+        dining_count += copy_dining_to_monthly(year, month)
+        # V1.0.61: 跨月行程也复制结束月的餐饮发票
+        end_month = int(end_date[5:7])
+        if end_month != month:
+            dining_count += copy_dining_to_monthly(year, end_month)
 
     # 5. 生成发票文件清单MD
     md_path, count_reimburse, total_reimburse = gen_invoice_list_md(
@@ -653,7 +676,6 @@ def main():
             print(f"   💡 未配置报销单模板 (REIMBURSEMENT_TEMPLATE)，跳过报销单生成")
 
     # 汇总
-    dining_count = len([inv for inv in matched if inv['category'] == '餐饮'])
     print(f"\n{'='*60}")
     print(f"📊 行程整理汇总")
     print(f"{'='*60}")
