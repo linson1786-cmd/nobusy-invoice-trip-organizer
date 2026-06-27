@@ -15,6 +15,7 @@
 用法:
   python3 refresh.py           # 执行刷新
   python3 refresh.py --dry-run # 预览（不修改文件）
+  python3 refresh.py --force   # 强制重识别（忽略版本号）
 """
 
 import os, re, sys, importlib.util
@@ -142,6 +143,7 @@ def update_refresh_version():
 
 def main():
     dry_run = '--dry-run' in sys.argv or '-n' in sys.argv
+    force = '--force' in sys.argv or '-f' in sys.argv
 
     # 版本检查（自动更新）
     try:
@@ -224,12 +226,13 @@ def main():
                 return tuple(int(x) for x in v.split('.'))
             except Exception:
                 return (0, 0, 0)
-        need_reprocess = _parse_ver(skill_ver) > _parse_ver(last_refresh_ver)
+        need_reprocess = _parse_ver(skill_ver) > _parse_ver(last_refresh_ver) or force
     except Exception:
-        need_reprocess = skill_ver != last_refresh_ver
+        need_reprocess = skill_ver != last_refresh_ver or force
 
     if need_reprocess and not dry_run:
-        print(f"   检测到版本升级 ({last_refresh_ver} → {skill_ver})，重新识别 03 已完成...")
+        reason = "强制重新识别" if force and skill_ver == last_refresh_ver else f"版本升级 ({last_refresh_ver} → {skill_ver})"
+        print(f"   检测到{reason}，重新识别 03 已完成...")
         moved = invoice_ao.reprocess_done_files()
         if moved > 0:
             print(f"   正在重新分类...")

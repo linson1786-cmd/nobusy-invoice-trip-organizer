@@ -1,5 +1,28 @@
 # 版本变更日志
 
+## 1.0.48 - 2026-06-27
+
+### 修复
+
+- **`classify()` 返回 None 导致下游崩溃** 🔴
+  - 问题：V1.0.45 改 `classify()` 为返回 None，`classify_with_subtype()` / `rename_update.py` 等下游都按"返回有效字符串"设计，None → 43个文件类别变为None + TypeError崩溃
+  - 修复：`classify()` 恢复返回 `"其他"`，始终返回有效字符串；`process_inbox()` 中拦截 `cat == "其他"` → 02 待核实
+
+- **refresh.py 增加 `--force` 参数** 🟡
+  - 问题：版本号相同时刷新跳过重识别，用户无法手动触发
+  - 修复：`refresh.py --force` 忽略版本号校验，强制全量重识别
+
+### 设计原则
+- `classify()` = 始终返回有效类别字符串（下游安全）
+- `process_inbox()` = 路由决策层，拦截"其他"不进归档
+- 两者解耦，互不影响
+
+### 变更文件
+
+- `invoice_auto_organizer.py`：`classify()` 返回 "其他"，3处检查改为 `cat == "其他"`
+- `refresh.py`：加 `--force` 参数
+- `VERSION` / `CHANGELOG.md` / `SKILL.md`：版本三件套更新
+
 ## 1.0.47 - 2026-06-27
 
 ### 修复（P0致命回归根因 + P0/P1）

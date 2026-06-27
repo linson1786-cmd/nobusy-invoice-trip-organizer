@@ -1734,7 +1734,7 @@ def classify(text, filename):
         for kw in keywords:
             if kw in s:
                 return cat
-    return None
+    return "其他"
 
 
 def classify_with_subtype(text, filename):
@@ -2216,7 +2216,7 @@ def process_inbox():
 
             cat = classify(text, f)
             # V1.0.47: 容错 None → 无法分类
-            if cat is None:
+            if cat == "其他":
                 move_to_review(src, f, "无法分类(无匹配类别)")
                 continue
             cat_label = classify_with_subtype(text, f) or "无法分类"
@@ -2515,7 +2515,7 @@ def process_inbox():
 
             cat = classify(text, f)
             # V1.0.47: 容错 None → 无法分类
-            if cat is None:
+            if cat == "其他":
                 move_to_review(src, f, "无法分类(无匹配类别)")
                 continue
             cat_label = classify_with_subtype(text, f) or "无法分类"
@@ -2763,8 +2763,8 @@ def process_inbox():
             amount = fn_amount
 
         cat = classify(text, f)
-        # V1.0.45: 无法分类的文件移入 02 待核实，不再归为"其他"
-        if cat is None:
+        # V1.0.48: 无法分类（返回"其他"）的文件移入 02 待核实
+        if cat == "其他":
             move_to_review(src, f, "无法分类(无匹配类别)")
             continue
         cat_label = classify_with_subtype(text, f)
