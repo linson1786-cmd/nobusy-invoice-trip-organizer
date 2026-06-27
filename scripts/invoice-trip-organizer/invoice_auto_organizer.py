@@ -695,6 +695,9 @@ def extract_date_for_flight_comparison(text):
             return f"{y}-{mo:02d}-{d:02d}", "单程完整日期"
 
     return None, "无航班日期"
+
+
+def extract_amount_for_flight_comparison(text):
     """机票比价图专用：提取金额（优先总价，降级取燃油费）
 
     识别格式（按优先级）：
@@ -2984,55 +2987,80 @@ def reprocess_done_files():
     skipped = 0
     os.makedirs(INPUT_DIR, exist_ok=True)
 
-    # 遍历 03 已完成/ 的年/月 子目录
-    for year_name in sorted(os.listdir(DONE_DIR)):
-        year_dir = os.path.join(DONE_DIR, year_name)
-        if not os.path.isdir(year_dir) or year_name.startswith('.'):
+    # 遍历 03 已完成/ 的子目录（兼容 YYYY-MM 两层 和 YYYY年/MM月 三层）
+    for subdir_name in sorted(os.listdir(DONE_DIR)):
+        subdir_path = os.path.join(DONE_DIR, subdir_name)
+        if not os.path.isdir(subdir_path) or subdir_name.startswith('.'):
             continue
-        for month_name in sorted(os.listdir(year_dir)):
-            month_dir = os.path.join(year_dir, month_name)
-            if not os.path.isdir(month_dir) or month_name.startswith('.'):
-                continue
-            for f in sorted(os.listdir(month_dir)):
-                src = os.path.join(month_dir, f)
+
+        # 判断是 YYYY-MM 直接含文件，还是 YYYY年 含 MM月 子目录
+        has_subdirs = any(os.path.isdir(os.path.join(subdir_path, x))
+                          for x in os.listdir(subdir_path) if not x.startswith('.'))
+
+        if has_subdirs:
+            # 三层结构: YYYY年/MM月/文件
+            for month_name in sorted(os.listdir(subdir_path)):
+                month_dir = os.path.join(subdir_path, month_name)
+                if not os.path.isdir(month_dir) or month_name.startswith('.'):
+                    continue
+                for f in sorted(os.listdir(month_dir)):
+                    src = os.path.join(month_dir, f)
+                    if not os.path.isfile(src) or f.startswith('.'):
+                        continue
+                    if f in ('台账.md', '日志.md'):
+                        continue
+                    if not is_business_file(src):
+                        continue
+                    dst = os.path.join(INPUT_DIR, f)
+                    if os.path.exists(dst):
+                        name, ext = os.path.splitext(f)
+                        counter = 1
+                        while os.path.exists(dst):
+                            dst = os.path.join(INPUT_DIR, f"{name}_{counter}{ext}")
+                            counter += 1
+                    shutil.move(src, dst)
+                    total_moved += 1
+        else:
+            # 两层结构: YYYY-MM/文件
+            for f in sorted(os.listdir(subdir_path)):
+                src = os.path.join(subdir_path, f)
                 if not os.path.isfile(src) or f.startswith('.'):
                     continue
-                # 跳过非业务文件（如台账.md）
                 if f in ('台账.md', '日志.md'):
                     continue
                 if not is_business_file(src):
                     continue
-
                 dst = os.path.join(INPUT_DIR, f)
-
-                # 检查 01 待分类/ 中是否已有同名文件
                 if os.path.exists(dst):
                     name, ext = os.path.splitext(f)
                     counter = 1
                     while os.path.exists(dst):
                         dst = os.path.join(INPUT_DIR, f"{name}_{counter}{ext}")
                         counter += 1
-
                 shutil.move(src, dst)
                 total_moved += 1
 
-    # 清理空的年/月子目录
-    for year_name in sorted(os.listdir(DONE_DIR)):
-        year_dir = os.path.join(DONE_DIR, year_name)
-        if not os.path.isdir(year_dir):
+    # 清理空的子目录（兼容两种结构）
+    for subdir_name in sorted(os.listdir(DONE_DIR)):
+        subdir_path = os.path.join(DONE_DIR, subdir_name)
+        if not os.path.isdir(subdir_path):
             continue
-        for month_name in sorted(os.listdir(year_dir)):
-            month_dir = os.path.join(year_dir, month_name)
-            if not os.path.isdir(month_dir):
-                continue
-            try:
-                if not os.listdir(month_dir):
-                    os.rmdir(month_dir)
-            except OSError:
-                pass
+        has_subdirs = any(os.path.isdir(os.path.join(subdir_path, x))
+                          for x in os.listdir(subdir_path) if not x.startswith('.'))
+        if has_subdirs:
+            # 三层结构: 先清月份，再清年份
+            for month_name in sorted(os.listdir(subdir_path)):
+                month_dir = os.path.join(subdir_path, month_name)
+                if not os.path.isdir(month_dir):
+                    continue
+                try:
+                    if not os.listdir(month_dir):
+                        os.rmdir(month_dir)
+                except OSError:
+                    pass
         try:
-            if not os.listdir(year_dir):
-                os.rmdir(year_dir)
+            if not os.listdir(subdir_path):
+                os.rmdir(subdir_path)
         except OSError:
             pass
 

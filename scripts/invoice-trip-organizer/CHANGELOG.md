@@ -1,5 +1,22 @@
 # 版本变更日志
 
+## 1.0.40 - 2026-06-27
+
+### 修复
+
+- **`reprocess_done_files()` 目录遍历 bug** 🔴
+  - 问题：函数假设 03 已完成/ 下是 `年/月/文件` 三层结构，但实际是 `YYYY-MM/文件` 两层结构，导致 69 个文件全部被跳过
+  - 修复：改为自动检测子目录结构，兼容 `YYYY-MM/文件`（两层）和 `YYYY年/MM月/文件`（三层）
+
+- **`extract_amount_for_flight_comparison` 函数定义丢失** 🔴
+  - 问题：V1.0.39 编辑日期提取函数时误删了 `def extract_amount_for_flight_comparison(text):` 函数声明行
+  - 修复：补回函数定义行
+
+### 变更文件
+
+- `invoice_auto_organizer.py`：`reprocess_done_files()` 重写目录遍历逻辑 + 补回函数定义
+- `VERSION` / `CHANGELOG.md` / `SKILL.md`：版本三件套更新
+
 ## 1.0.39 - 2026-06-27
 
 ### 修复
