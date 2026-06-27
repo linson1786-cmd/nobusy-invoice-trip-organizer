@@ -1698,14 +1698,15 @@ INVOICE_CONTENT_MARKERS = STRICT_INVOICE_MARKERS + NON_INVOICE_MARKERS
 
 
 def is_invoice_file(text, ext):
-    """V1.0.49: 判断是否为正式发票文件。
+    """V1.0.52: 判断是否为正式发票文件（需同时命中 ≥3 个法定特征词）
     
     正式发票：含发票号/税号/销售方等法定要素 → 走严格规则
     普通文件：OTA截图/水单/预订确认/行程单 → 走宽松规则
     """
     if not text:
         return ext.lower() == '.pdf'  # PDF默认按发票处理
-    return any(marker in text for marker in STRICT_INVOICE_MARKERS)
+    match_count = sum(1 for marker in STRICT_INVOICE_MARKERS if marker in text)
+    return match_count >= 3
 
 
 # V1.0.43: 文件名中的已知类别标签，防止 reprocess 时旧名污染分类
@@ -1752,7 +1753,7 @@ def classify(text, filename):
     """返回基础类别（不含子类型），用于流程逻辑判断"""
     s = (text or "") + _clean_filename_for_classify(filename)
     # V1.0.51: 真发票（含法定特征词）跳过比价图规则，防止通用词抢匹配
-    is_real_invoice = any(marker in s for marker in STRICT_INVOICE_MARKERS)
+    is_real_invoice = sum(1 for marker in STRICT_INVOICE_MARKERS if marker in s) >= 3
     for keywords, cat in CATEGORY_RULES:
         if "比价图" in cat and is_real_invoice:
             continue

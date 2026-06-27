@@ -1,5 +1,19 @@
 # 版本变更日志
 
+## 1.0.52 - 2026-06-28
+
+### 改进
+
+- **`is_invoice_file()` 改为 ≥3 关键词判定** 📋
+  - 原逻辑：命中任一 STRICT_INVOICE_MARKERS → 正式发票
+  - 新逻辑：**≥3 个关键词同时命中** → 正式发票
+  - 效果：OTA 截图偶然含 1 个词（如"开票日期"）不会被误判，真发票稳定 5-7 个命中不受影响
+
+### 变更文件
+
+- `invoice_auto_organizer.py`：`is_invoice_file()` + `classify()` 两处 `any()` → `sum() >= 3`
+- `VERSION` / `CHANGELOG.md` / `SKILL.md`：版本三件套更新
+
 ## 1.0.51 - 2026-06-28
 
 ### 修复（4项连锁Bug）
