@@ -1,5 +1,27 @@
 # 版本变更日志
 
+## 1.0.45 - 2026-06-27
+
+### 改进（严格执行）
+
+- **删除"其他"类别** 🚫
+  - `classify()` 返回 `None` 替代 `"其他"`
+  - 无匹配类别的文件直接移入 `02 待核实/`（原因："无法分类(无匹配类别)"）
+  - `VALID_CATEGORIES` 移除"其他"
+  - 改名 `classify()` + `classify_with_subtype()` 链路均兼容 None 返回
+
+- **条件不齐全严格执行** 📋
+  - 比价图日期提取失败 → 02 待核实（V1.0.44）
+  - 无法分类 → 02 待核实（V1.0.45）
+  - 无法提取金额 → 02 待核实（已有）
+  - 无法提取日期 → 02 待核实（已有）
+
+### 变更文件
+
+- `invoice_auto_organizer.py`：`classify()` 返回 None、`process_inbox()` 加 None 检查、VALID_CATEGORIES/CATEGORY_LABELS 去"其他"
+- `config.py`：VALID_CATEGORIES 移除"其他"
+- `VERSION` / `CHANGELOG.md` / `SKILL.md`：版本三件套更新
+
 ## 1.0.44 - 2026-06-27
 
 ### 改进

@@ -49,7 +49,7 @@ DONE_DIR = ""
 REVIEW_DIR = ""
 LOG_FILE = ""
 
-VALID_CATEGORIES = ["餐饮", "住宿", "住宿比价图", "机票", "机票比价图", "高铁", "高铁比价图", "滴滴打车", "行程单", "高速费", "油电类", "礼品", "结账单", "其他",
+VALID_CATEGORIES = ["餐饮", "住宿", "住宿比价图", "机票", "机票比价图", "高铁", "高铁比价图", "滴滴打车", "行程单", "高速费", "油电类", "礼品", "结账单",
                     "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"]
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.heic', '.bmp', '.tiff', '.tif', '.webp']
 PROCESSABLE_EXTENSIONS = ['.pdf'] + IMAGE_EXTENSIONS
@@ -1686,7 +1686,7 @@ def has_invoice_markers(text):
 # V1.0.43: 文件名中的已知类别标签，防止 reprocess 时旧名污染分类
 CATEGORY_LABELS_IN_FILENAME = [cat for _, cat in CATEGORY_RULES] if 'CATEGORY_RULES' in dir() else [
     "机票比价图", "高铁比价图", "住宿比价图", "结账单", "行程单", "住宿", "礼品",
-    "高速费", "充电费", "油电类", "滴滴打车", "高铁", "机票", "餐饮", "其他",
+    "高速费", "充电费", "油电类", "滴滴打车", "高铁", "机票", "餐饮",
     "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"
 ]
 
@@ -1706,7 +1706,7 @@ def classify(text, filename):
         for kw in keywords:
             if kw in s:
                 return cat
-    return "其他"
+    return None
 
 
 def classify_with_subtype(text, filename):
@@ -2727,6 +2727,10 @@ def process_inbox():
             amount = fn_amount
 
         cat = classify(text, f)
+        # V1.0.45: 无法分类的文件移入 02 待核实，不再归为"其他"
+        if cat is None:
+            move_to_review(src, f, "无法分类(无匹配类别)")
+            continue
         cat_label = classify_with_subtype(text, f)
 
         # 行程单vs发票交叉去重: 行程单与已有对应发票金额匹配时删行程单
