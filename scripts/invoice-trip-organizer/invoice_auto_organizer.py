@@ -2207,9 +2207,25 @@ def process_inbox():
     print(f"   已归档发票号: {len(archived_inv_nums)} 个 | 滴滴打车金额: {len(archived_dd_amounts)} 个 | 行程单金额: {len(archived_trip_amounts)} 个 | 通用去重索引: {len(archived_file_keys)} 条 | 住宿结账单索引: {len(zs_checkout_index)} 条 | 住宿发票索引: {len(zs_invoice_index)} 条")
 
     def move_to_review(src, filename, reason):
-        dst = os.path.join(REVIEW_DIR, filename)
-        counter = 1
+        # V1.0.57: 文件名前缀简述原因
+        # 取原因的前8个中文字符或到第一个括号
+        short = reason.split('（')[0].split('(')[0].strip()
+        # 常见原因统一简短命名
+        reason_map = {
+            "无法分类": "无类别",
+            "无法提取日期": "无日期",
+            "无法提取金额": "无金额",
+            "金额格式异常": "金额异常",
+            "正式发票缺少法定特征词": "缺发票特征",
+            "机票比价图无法提取航班日期": "无航班日期",
+            "高铁比价图无法提取乘车日期": "无乘车日期",
+            "住宿比价图无法提取入住日期": "无入住日期",
+            "金额异常": "金额异常",
+        }
+        tag = reason_map.get(short, short[:8])
         name, ext = os.path.splitext(filename)
+        dst = os.path.join(REVIEW_DIR, f"[{tag}]{name}{ext}")
+        counter = 1
         while os.path.exists(dst):
             dst = os.path.join(REVIEW_DIR, f"{name}_{counter}{ext}")
             counter += 1
