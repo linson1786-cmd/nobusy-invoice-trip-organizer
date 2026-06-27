@@ -1,5 +1,32 @@
 # 版本变更日志
 
+## 1.0.46 - 2026-06-27
+
+### 修复（基于 V1.0.45 用户反馈报告，4项回归修复）
+
+- **`_clean_filename_for_classify()` 过度清理** 🔴 回归根因
+  - 问题：V1.0.43 引入的全局 `replace()` 清理所有文件名中的类别标签，子串副作用导致误删有效信息
+  - 修复：改为位置精确匹配——只移除文件名 `_` 分隔后位置1（标准格式中的类别位置）的标签
+
+- **PDF CJK 换行导致关键词断裂** 🔴
+  - 问题：pdfminer 提取时在 CJK 字符间插入 `\n`，`"国内航空"` → `"国内航\n空"`，`"航空" in text` → False
+  - 修复：`extract_pdf_text()` 增加后处理 `re.sub(r'([\u4e00-\u9fff])\\s*\\n\\s*([\u4e00-\u9fff])', r'\\1\\2', text)`
+
+- **关键词缺失** 🟡
+  - 机票：补充 `"保险"`（平安保险发票含"责任保险"非"保险服务"）
+  - 滴滴：补充 `"didi"`、`"代驾"`（代驾发票不含"滴滴"）
+  - 礼品：补充 `"丝巾"`、`"纺织"`
+  - 餐饮：补充 `"酒"`、`"白酒"`、`"洋酒"`、`"红酒"`、`"啤酒"`（红酒发票）
+
+- **config.py 关键词缺漏** 🟡
+  - config.py 的 CATEGORY_RULES 覆盖 invoice_auto_organizer.py，需两处同步更新
+
+### 变更文件
+
+- `invoice_auto_organizer.py`：`_clean_filename_for_classify()` 重写 + `extract_pdf_text()` 加 CJK 合并 + CATEGORY_RULES 关键词补充
+- `config.py`：CATEGORY_RULES 关键词同步补充
+- `VERSION` / `CHANGELOG.md` / `SKILL.md`：版本三件套更新
+
 ## 1.0.45 - 2026-06-27
 
 ### 改进（严格执行）
