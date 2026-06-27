@@ -80,6 +80,13 @@ try:
             r'(\.\w+)$'
         )
         print(f"✅ 已从 config.py 读取配置 ({len(_overridden)} 项，INPUT_DIR={INPUT_DIR})")
+
+        # V1.0.47: 强制使用脚本内置的分类规则，覆盖 config.py 中可能过时的旧版本
+        # 路径等用户配置保留 config.py 的值，分类规则始终以脚本为准
+        if '_DEFAULT_CATEGORY_RULES' in dir():
+            CATEGORY_RULES = _DEFAULT_CATEGORY_RULES
+        if '_DEFAULT_SUBTYPE_RULES' in dir():
+            SUBTYPE_RULES = _DEFAULT_SUBTYPE_RULES
     else:
         print("⚠️ 未找到 config.py，请先运行：python3 setup.py init")
 except Exception as e:
@@ -152,8 +159,7 @@ def get_next_seq_number():
 # 每条规则: (关键词列表, 基础类别)
 # 子类型由 classify_with_subtype() 在基础类别基础上根据二次判定决定
 # 如 config.py 已定义，此处不再重复定义
-if 'CATEGORY_RULES' not in dir():
-    CATEGORY_RULES = [
+_DEFAULT_CATEGORY_RULES = [
         # ===== 比价图类（最优先，防止 OTA 截图被通用词抢先匹配）=====
         # V1.0.38: 机票比价图补充"单程"关键词（OTA截图常见）
         (["直飞", "乘机人", "托运行李", "机场燃油", "机建燃油",
@@ -194,9 +200,7 @@ if 'CATEGORY_RULES' not in dir():
 
 # ===== 子类型判定规则 =====
 # 在基础类别确定后，根据特定关键词决定是否追加子类型标签
-# 如 config.py 已定义，此处不再重复定义
-if 'SUBTYPE_RULES' not in dir():
-    SUBTYPE_RULES = [
+_DEFAULT_SUBTYPE_RULES = [
         # 机票类中出现保险关键词 → "机票(保险)"
         ("机票", ["保险服务", "航意航延组合险标准计划", "航意险", "保险"], "(保险)"),
         # 行程单类中出现滴滴关键词 → 归为"滴滴打车(行程单)"
@@ -2211,7 +2215,11 @@ def process_inbox():
                 amount = fn_amount
 
             cat = classify(text, f)
-            cat_label = classify_with_subtype(text, f)
+            # V1.0.47: 容错 None → 无法分类
+            if cat is None:
+                move_to_review(src, f, "无法分类(无匹配类别)")
+                continue
+            cat_label = classify_with_subtype(text, f) or "无法分类"
 
             # 机票类/高铁类/住宿类特殊日期规则 (用基础类别判断)
             if cat == "机票":
@@ -2506,7 +2514,11 @@ def process_inbox():
                 date = extract_date_from_text(text) or extract_date_from_filename(f)
 
             cat = classify(text, f)
-            cat_label = classify_with_subtype(text, f)
+            # V1.0.47: 容错 None → 无法分类
+            if cat is None:
+                move_to_review(src, f, "无法分类(无匹配类别)")
+                continue
+            cat_label = classify_with_subtype(text, f) or "无法分类"
 
             # 机票类/高铁类/住宿类特殊日期规则 (用基础类别判断)
             if cat == "机票":
@@ -3174,9 +3186,32 @@ def reprocess_review_files():
     os.makedirs(INPUT_DIR, exist_ok=True)
 
     print(f"\n🔄 重新识别 02 待核实/ 中的 {len(files)} 个文件...")
+    # V1.0.47: 回炉计数器 — 防止同一文件无限循环 OCR
+    # 文件名中 _rrN 后缀表示已回炉 N 次，超过 3 次则跳过
+    for f in files[:]:  # 用拷贝遍历以支持原地移除
+        fname = os.path.basename(f)
+        rr_match = re.search(r'_rr(\d+)_', fname)
+        if rr_match:
+            rr_count = int(rr_match.group(1))
+            if rr_count >= 3:
+                print(f"   ⏭️  {fname[:50]} 已回炉 {rr_count} 次，跳过（请手动处理）")
+                files.remove(f)
+                skipped += 1
+    
     for f in files:
         src = os.path.join(REVIEW_DIR, f)
         fname = os.path.basename(f)  # 递归子目录时只取文件名
+        
+        # V1.0.47: 标记回炉次数 — 文件名加 _rrN_ 后缀
+        rr_match = re.search(r'_rr(\d+)_', fname)
+        if rr_match:
+            rr_count = int(rr_match.group(1)) + 1
+            fname = re.sub(r'_rr\d+_', f'_rr{rr_count}_', fname)
+        else:
+            # 在扩展名前插入 _rr1_
+            base, ext = os.path.splitext(fname)
+            fname = f"{base}_rr1{ext}"
+        
         dst = os.path.join(INPUT_DIR, fname)
 
         # 检查 01 待分类/ 中是否已有同名文件

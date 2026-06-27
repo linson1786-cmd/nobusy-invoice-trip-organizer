@@ -1,5 +1,25 @@
 # 版本变更日志
 
+## 1.0.47 - 2026-06-27
+
+### 修复（P0致命回归根因 + P0/P1）
+
+- **config.py 覆盖脚本 CATEGORY_RULES** 🔴🔴 P0 致命
+  - 根因：`invoice_auto_organizer.py` 先用 `if 'CATEGORY_RULES' not in dir()` 定义默认规则，但随后 `config.py` 导入时 `globals()[_attr] = config值` 全部覆盖
+  - 影响：v1.0.36～v1.0.46 共 11 个版本的所有关键词修复实际未生效
+  - 修复：改名 `_DEFAULT_CATEGORY_RULES` / `_DEFAULT_SUBTYPE_RULES`，在 config.py 加载后强制恢复
+
+- **classify() 返回 None 导致格式化崩溃** 🔴 P0
+  - 修复：所有 `classify()` 调用点加 `if cat is None → move_to_review + continue` 容错
+
+- **02待核实回炉无限循环** 🟡 P1
+  - 修复：回炉时文件名加 `_rrN_` 计数标记，≥3次自动跳过
+
+### 变更文件
+
+- `invoice_auto_organizer.py`：CATEGORY_RULES/SUBTYPE_RULES 改为 `_DEFAULT_*` + config 加载后强制恢复 + None 容错 + 回炉计数
+- `VERSION` / `CHANGELOG.md` / `SKILL.md`：版本三件套更新
+
 ## 1.0.46 - 2026-06-27
 
 ### 修复（基于 V1.0.45 用户反馈报告，4项回归修复）
