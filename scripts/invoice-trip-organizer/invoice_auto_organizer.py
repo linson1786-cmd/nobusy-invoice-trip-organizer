@@ -182,8 +182,7 @@ _DEFAULT_CATEGORY_RULES = [
         (["蟹", "手信", "礼品", "新年", "淡水蟹", "淡水产品", "安琪",
           "日用杂品", "日用品", "日化用品", "礼盒", "水果", "玩具",
           "移动通信设备", "通讯器材", "通讯器材及配件",
-          "丝巾", "纺织",
-          "洗浴", "家政", "生活服务"], "礼品"),
+          "丝巾", "纺织"], "礼品"),
         (["高速", "通行费", "车辆通行", "路桥费", "收费站", "ETC", "高速费"], "高速费"),
         # V1.0.46: 机票补充"保险"关键词（平安保险发票含"责任保险"而非"保险服务"）
         (["机票", "航空", "航班", "登机牌", "CA ", "CZ ", "MU ", "HU ",
@@ -198,6 +197,8 @@ _DEFAULT_CATEGORY_RULES = [
         (["火车票", "高铁", "车票", "C3775", "二等座", "铁路", "电子客票", "一等座"], "高铁"),
         (["招待", "餐饮", "餐费", "就餐", "餐厅", "饭店", "酒家", "饮食", "菜品",
           "江鱼儿", "晶晶", "酒", "白酒", "洋酒", "红酒", "啤酒", "酒水"], "餐饮"),
+        # V1.0.53: 生活服务类（洗浴/家政/京东到家/保洁等非礼品非餐饮发票）
+        (["洗浴", "家政", "生活服务", "休闲服务", "保洁"], "其他"),
     ]
 
 # ===== 子类型判定规则 =====
@@ -1769,7 +1770,7 @@ def classify(text, filename):
         for kw in keywords:
             if kw in s:
                 return cat
-    return "其他"
+    return "无法分类"
 
 
 def classify_with_subtype(text, filename):
@@ -2251,7 +2252,7 @@ def process_inbox():
 
             cat = classify(text, f)
             # V1.0.47: 容错 None → 无法分类
-            if cat == "其他":
+            if cat == "无法分类":
                 move_to_review(src, f, "无法分类(无匹配类别)")
                 continue
             cat_label = classify_with_subtype(text, f) or "无法分类"
@@ -2550,7 +2551,7 @@ def process_inbox():
 
             cat = classify(text, f)
             # V1.0.47: 容错 None → 无法分类
-            if cat == "其他":
+            if cat == "无法分类":
                 move_to_review(src, f, "无法分类(无匹配类别)")
                 continue
             cat_label = classify_with_subtype(text, f) or "无法分类"
@@ -2798,8 +2799,8 @@ def process_inbox():
             amount = fn_amount
 
         cat = classify(text, f)
-        # V1.0.48: 无法分类（返回"其他"）的文件移入 02 待核实
-        if cat == "其他":
+        # V1.0.48: 无法分类（返回"无法分类"）的文件移入 02 待核实
+        if cat == "无法分类":
             move_to_review(src, f, "无法分类(无匹配类别)")
             continue
         cat_label = classify_with_subtype(text, f)
