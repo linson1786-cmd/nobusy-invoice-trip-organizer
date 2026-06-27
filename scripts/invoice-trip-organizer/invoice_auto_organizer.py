@@ -186,7 +186,7 @@ _DEFAULT_CATEGORY_RULES = [
         # V1.0.46: 机票补充"保险"关键词（平安保险发票含"责任保险"而非"保险服务"）
         (["机票", "航空", "航班", "登机牌", "CA ", "CZ ", "MU ", "HU ",
           "保险服务", "保险", "航意航延组合险标准计划", "经纪代理服务", "退票费",
-          "经济舱", "机建燃油", "票价", "托运"], "机票"),
+          "经济舱", "机建燃油", "托运"], "机票"),
         # V1.0.36 Bug 3: "充电"已改为"充电费"精确匹配，排除"充电宝禁止携带"
         (["充电费", "蔚来", "NIO", "换电", "充电桩"], "充电费"),
         (["加油", "汽油", "柴油", "中石化", "中石油", "中海油", "壳牌",
@@ -1677,9 +1677,10 @@ def extract_amount_from_filename(filename):
 # ===== V1.0.49: 文件类型预分类 — 发票 vs 普通文件 =====
 
 # 正式发票的严格特征词（含发票号/税号/销售方等法定要素）
+# V1.0.51: 移除"电子发票""电子客票"（太宽泛，OTA截图也含），保留"铁路电子客票"
 STRICT_INVOICE_MARKERS = [
     "发票号码", "发票代码", "开票日期", "价税合计", "机器编号",
-    "税号", "电子发票", "增值税", "铁路电子客票", "电子客票",
+    "税号", "增值税", "铁路电子客票",
     "收款人", "复核人", "开票人", "销售方", "购买方",
     " Invoice", "Receipt", "Tax",
 ]
@@ -1750,7 +1751,11 @@ def _clean_filename_for_classify(filename):
 def classify(text, filename):
     """返回基础类别（不含子类型），用于流程逻辑判断"""
     s = (text or "") + _clean_filename_for_classify(filename)
+    # V1.0.51: 真发票（含法定特征词）跳过比价图规则，防止通用词抢匹配
+    is_real_invoice = any(marker in s for marker in STRICT_INVOICE_MARKERS)
     for keywords, cat in CATEGORY_RULES:
+        if "比价图" in cat and is_real_invoice:
+            continue
         for kw in keywords:
             if kw in s:
                 return cat
@@ -3217,6 +3222,14 @@ def reprocess_review_files():
                 print(f"   ⏭️  {fname[:50]} 已回炉 {rr_count} 次，跳过（请手动处理）")
                 files.remove(f)
                 skipped += 1
+    
+    # V1.0.51: 跳过已是标准格式的文件（用户已手动核实命名）
+    for f in files[:]:
+        fname = os.path.basename(f)
+        if STANDARD_NAME_RE.match(fname):
+            print(f"   ⏭️  {fname[:50]} 已是标准格式，跳过")
+            files.remove(f)
+            skipped += 1
     
     for f in files:
         src = os.path.join(REVIEW_DIR, f)

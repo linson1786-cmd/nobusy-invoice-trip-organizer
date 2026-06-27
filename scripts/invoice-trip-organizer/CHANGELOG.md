@@ -1,5 +1,30 @@
 # 版本变更日志
 
+## 1.0.51 - 2026-06-28
+
+### 修复（4项连锁Bug）
+
+- **真高铁票被比价图抢匹配** 🔴 Bug A
+  - 根因：高铁比价图含"二等座""车票"，真高铁票PDF也含，比价图规则排前→抢匹配
+  - 修复：`classify()` 中检测 STRICT_INVOICE_MARKERS，真发票跳过所有"比价图"类别
+
+- **"票价"关键词太通用** 🔴 Bug B
+  - 根因：机票关键词含"票价"，真高铁票含"票价:￥19.00"→误判为"机票"
+  - 修复：机票关键词移除"票价"
+
+- **"电子发票""电子客票"太宽泛** 🟡 Bug C
+  - 根因：OTA截图含"仅提供全额电子发票"→触发真发票检测→跳过比价图→误判类别
+  - 修复：STRICT_INVOICE_MARKERS 移除"电子发票""电子客票"，保留"铁路电子客票"
+
+- **已核实文件被反复回炉** 🟡 P1
+  - 修复：`reprocess_review_files()` 加 `STANDARD_NAME_RE.match()` 检查，已标准格式跳过
+
+### 变更文件
+
+- `invoice_auto_organizer.py`：classify() 真发票跳过比价图 + keyword移除 + STRICT_INVOICE_MARKERS 精简 + 标准格式跳过
+- `config.py`：机票关键词同步移除"票价"
+- `VERSION` / `CHANGELOG.md` / `SKILL.md`：版本三件套更新
+
 ## 1.0.50 - 2026-06-28
 
 ### 新增
