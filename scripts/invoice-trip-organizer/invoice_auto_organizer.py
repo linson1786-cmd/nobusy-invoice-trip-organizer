@@ -49,7 +49,7 @@ DONE_DIR = ""
 REVIEW_DIR = ""
 LOG_FILE = ""
 
-VALID_CATEGORIES = ["餐饮", "住宿", "住宿比价图", "机票", "机票比价图", "高铁", "高铁比价图", "滴滴打车", "行程单", "高速费", "充电费", "油电类", "礼品", "结账单", "其他",
+VALID_CATEGORIES = ["餐饮", "住宿", "住宿比价图", "机票", "机票比价图", "高铁", "高铁比价图", "滴滴打车", "行程单", "高速费", "油电类", "礼品", "结账单", "其他",
                     "机票(保险)", "滴滴打车(行程单)", "住宿(结账单)", "高速费(行程单)"]
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.heic', '.bmp', '.tiff', '.tif', '.webp']
 PROCESSABLE_EXTENSIONS = ['.pdf'] + IMAGE_EXTENSIONS
@@ -148,22 +148,23 @@ def get_next_seq_number():
                     max_seq = seq
     return max_seq + 1
 
-# ===== 分类规则（按 SOP-发票文件命名标准.md）=====
+# ===== 分类规则（按 文件识别命名标准.md）=====
 # 每条规则: (关键词列表, 基础类别)
 # 子类型由 classify_with_subtype() 在基础类别基础上根据二次判定决定
 # 如 config.py 已定义，此处不再重复定义
 if 'CATEGORY_RULES' not in dir():
     CATEGORY_RULES = [
         # ===== 比价图类（最优先，防止 OTA 截图被通用词抢先匹配）=====
+        # V1.0.38: 机票比价图补充"单程"关键词（OTA截图常见）
         (["直飞", "乘机人", "托运行李", "机场燃油", "机建燃油",
           "机票比价", "余票紧张", "免费手提行李",
           "出发城市", "到达城市", "起降时间", "航班动态",
           "飞常准", "值机柜台", "登机口", "准点分析", "前序航班",
-          "行李转盘", "到达口"], "机票比价图"),
+          "行李转盘", "到达口", "单程"], "机票比价图"),
         (["乘车人", "车次", "运行时间", "出发站", "到达站", "12306",
           "抢票", "候补", "高铁比价", "火车票比价",
           "预订成功", "预定成功", "订单详情",
-          "历时", "检票口", "询车票"], "高铁比价图"),
+          "历时", "检票口", "询车票", "二等座", "车票"], "高铁比价图"),
         (["房型", "大床房", "双床房", "标准间", "豪华房", "亲子房",
           "入住人", "连住", "每晚",
           "住宿比价", "酒店比价"], "住宿比价图"),
@@ -600,6 +601,7 @@ def extract_date_for_flight_comparison(text):
     4. "直飞\n06-15" (OCR换行)
     5. "出发日期: 2026-06-15" / "起飞时间 06-15" (预订截图)
     6. "乘机日期 06月15日" / "航班日期 2026-06-15"
+    7. "计划 1/24 20:55" / "计划 1/24" / "计划 01-24" (计划出行日期)
 
     返回: (date_str, source_str) 或 (None, "无航班日期")
     """
@@ -638,16 +640,16 @@ def extract_date_for_flight_comparison(text):
         if 1 <= mo <= 12 and 1 <= d <= 31:
             return f"{_year}-{mo:02d}-{d:02d}", "直飞附近月日"
 
-    # 5. 预订截图格式：出发日期/起飞时间/乘机日期/航班日期 + 完整日期
-    for label in ['出发日期', '起飞时间', '乘机日期', '航班日期', '出发时间', '行程日期']:
+    # 5. 预订截图格式：出发日期/起飞时间/乘机日期/航班日期/计划 + 完整日期
+    for label in ['出发日期', '起飞时间', '乘机日期', '航班日期', '出发时间', '行程日期', '计划', '今天']:
         m = re.search(label + r'[\s：:]*(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
         if m:
             y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
             if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
                 return f"{y}-{mo:02d}-{d:02d}", f"{label}完整日期"
 
-    # 6. 预订截图格式：出发日期/起飞时间/乘机日期/航班日期 + 月-日
-    for label in ['出发日期', '起飞时间', '乘机日期', '航班日期', '出发时间', '行程日期']:
+    # 6. 预订截图格式：出发日期/起飞时间/乘机日期/航班日期/计划 + 月-日
+    for label in ['出发日期', '起飞时间', '乘机日期', '航班日期', '出发时间', '行程日期', '计划', '今天']:
         m = re.search(label + r'[\s：:]*(\d{1,2})[月\-/.](\d{1,2})', text)
         if m:
             mo, d = int(m.group(1)), int(m.group(2))
@@ -679,10 +681,20 @@ def extract_date_for_flight_comparison(text):
         if 1 <= mo <= 12 and 1 <= d <= 31:
             return f"{_year}-{mo:02d}-{d:02d}", "OTA裸月日+路线"
 
+    # 8. V1.0.38: "单程" + 月日格式（OTA截图常见）
+    #    例: "单程 4月9日" / "单程 04-09" / "单程 4/9"
+    m = re.search(r'单程[\s\n]*(\d{1,2})[月\-/.](\d{1,2})', text)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{_year}-{mo:02d}-{d:02d}", "单程月日"
+    m = re.search(r'单程[\s\n]*(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{y}-{mo:02d}-{d:02d}", "单程完整日期"
+
     return None, "无航班日期"
-
-
-def extract_amount_for_flight_comparison(text):
     """机票比价图专用：提取金额（优先总价，降级取燃油费）
 
     识别格式（按优先级）：
@@ -855,7 +867,7 @@ def extract_date_for_train_comparison(text):
     _year = datetime.now().year
 
     # 1. 乘车日期/出发日期 + 完整日期
-    for label in ['乘车日期', '出发日期', '行程日期', '发车日期', '出发时间']:
+    for label in ['乘车日期', '出发日期', '行程日期', '发车日期', '出发时间', '发车时间']:
         m = re.search(label + r'[\s：:]*(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})', text)
         if m:
             y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -863,14 +875,21 @@ def extract_date_for_train_comparison(text):
                 return f"{y}-{mo:02d}-{d:02d}", f"{label}完整日期"
 
     # 2. 乘车日期/出发日期 + 月-日
-    for label in ['乘车日期', '出发日期', '行程日期', '发车日期', '出发时间']:
+    for label in ['乘车日期', '出发日期', '行程日期', '发车日期', '出发时间', '发车时间']:
         m = re.search(label + r'[\s：:]*(\d{1,2})[月\-/.](\d{1,2})', text)
         if m:
             mo, d = int(m.group(1)), int(m.group(2))
             if 1 <= mo <= 12 and 1 <= d <= 31:
                 return f"{_year}-{mo:02d}-{d:02d}", f"{label}月日"
 
-    # 3. OTA 截图裸日期：无标签前缀，但日期附近有车次/运行时间/出发站
+    # 3. OTA 日期+星期格式：如 "3月30日(周一)" / "3月30日（周一）"
+    m = re.search(r'(\d{1,2})月(\d{1,2})日[（(]\s*周[一二三四五六日]\s*[）)]', text)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{_year}-{mo:02d}-{d:02d}", "OTA月日周几"
+
+    # 4. OTA 截图裸日期：无标签前缀，但日期附近有车次/运行时间/出发站
     #    先试完整日期 YYYY-MM-DD
     m = re.search(
         r'(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})'
@@ -2324,7 +2343,9 @@ def process_inbox():
             status_suffix = make_status_suffix()
             route_part = f"_{route}" if route else ""
             seq_suffix = f"_{next_seq:03d}"
-            new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
+            # 比价图金额规则：所有比价图（机票/高铁/住宿）不加金额
+            amount_str = "" if "比价图" in cat_label else f"_{amount}"
+            new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
             month_dir = os.path.join(DONE_DIR, date[:7])
             os.makedirs(month_dir, exist_ok=True)
             dst = os.path.join(month_dir, new_name)
@@ -2332,12 +2353,12 @@ def process_inbox():
             if os.path.exists(dst):
                 if inv:
                     suffix = inv[0][-4:]
-                    new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
+                    new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
                     dst = os.path.join(month_dir, new_name)
                 else:
                     counter = 1
                     while os.path.exists(dst):
-                        new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
+                        new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
                         dst = os.path.join(month_dir, new_name)
                         counter += 1
 
@@ -2567,7 +2588,9 @@ def process_inbox():
             status_suffix = make_status_suffix()
             route_part = f"_{route}" if route else ""
             seq_suffix = f"_{next_seq:03d}"
-            new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
+            # 比价图金额规则：所有比价图（机票/高铁/住宿）不加金额
+            amount_str = "" if "比价图" in cat_label else f"_{amount}"
+            new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
             month_dir = os.path.join(DONE_DIR, date[:7])
             os.makedirs(month_dir, exist_ok=True)
             dst = os.path.join(month_dir, new_name)
@@ -2575,12 +2598,12 @@ def process_inbox():
             if os.path.exists(dst):
                 if inv:
                     suffix = inv[0][-4:]
-                    new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
+                    new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{out_ext}"
                     dst = os.path.join(month_dir, new_name)
                 else:
                     counter = 1
                     while os.path.exists(dst):
-                        new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
+                        new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{out_ext}"
                         dst = os.path.join(month_dir, new_name)
                         counter += 1
 
@@ -2896,7 +2919,9 @@ def process_inbox():
         status_suffix = make_status_suffix()
         route_part = f"_{route}" if route else ""
         seq_suffix = f"_{next_seq:03d}"
-        new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}{status_suffix}{seq_suffix}{ext}"
+        # 比价图金额规则：所有比价图（机票/高铁/住宿）不加金额
+        amount_str = "" if "比价图" in cat_label else f"_{amount}"
+        new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}{status_suffix}{seq_suffix}{ext}"
         month_dir = os.path.join(DONE_DIR, date[:7])
         os.makedirs(month_dir, exist_ok=True)
         dst = os.path.join(month_dir, new_name)
@@ -2904,12 +2929,12 @@ def process_inbox():
         if os.path.exists(dst):
             if inv:
                 suffix = inv[0][-4:]
-                new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{ext}"
+                new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}_{suffix}{status_suffix}{seq_suffix}{ext}"
                 dst = os.path.join(month_dir, new_name)
             else:
                 counter = 1
                 while os.path.exists(dst):
-                    new_name = f"{date}_{cat_label}_{amount}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{ext}"
+                    new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}_{counter}{status_suffix}{seq_suffix}{ext}"
                     dst = os.path.join(month_dir, new_name)
                     counter += 1
 
@@ -3018,6 +3043,18 @@ def reprocess_done_files():
     return total_moved
 
 
+def _clean_empty_subdirs(base_dir):
+    """删除根目录下的空子文件夹"""
+    cleaned = 0
+    if not os.path.isdir(base_dir): return cleared
+    for name in os.listdir(base_dir):
+        path = os.path.join(base_dir, name)
+        if os.path.isdir(path) and not os.listdir(path):
+            os.rmdir(path)
+            cleaned += 1
+    return cleaned
+
+
 def reprocess_review_files():
     """把 02 待核实/ 中的文件移回 01 待分类/，让新逻辑有机会重新识别
 
@@ -3030,6 +3067,12 @@ def reprocess_review_files():
     files = [f for f in os.listdir(REVIEW_DIR)
              if not f.startswith('.') and f not in ['日志.md', '台账.md']
              and os.path.isfile(os.path.join(REVIEW_DIR, f))]
+    # 递归子目录
+    for root, dirs, filenames in os.walk(REVIEW_DIR):
+        if root == REVIEW_DIR: continue
+        for fn in filenames:
+            if fn.startswith('.') or fn in ['日志.md', '台账.md']: continue
+            files.append(os.path.relpath(os.path.join(root, fn), REVIEW_DIR))
 
     if not files:
         return
@@ -3041,7 +3084,8 @@ def reprocess_review_files():
     print(f"\n🔄 重新识别 02 待核实/ 中的 {len(files)} 个文件...")
     for f in files:
         src = os.path.join(REVIEW_DIR, f)
-        dst = os.path.join(INPUT_DIR, f)
+        fname = os.path.basename(f)  # 递归子目录时只取文件名
+        dst = os.path.join(INPUT_DIR, fname)
 
         # 检查 01 待分类/ 中是否已有同名文件
         if os.path.exists(dst):
@@ -3057,6 +3101,12 @@ def reprocess_review_files():
         moved += 1
 
     print(f"   ✅ 已移回 01 待分类/: {moved} 个（将在 Phase 1 重新识别）")
+
+    # 清理空子目录
+    cleaned = _clean_empty_subdirs(REVIEW_DIR)
+    if cleaned:
+        print(f"   🧹 清理空文件夹: {cleaned} 个")
+
 
 
 # ===== 阶段2: 处理 02 待核实（已手动核实的文件）=====
@@ -3075,6 +3125,12 @@ def process_review():
     files = sorted([f for f in os.listdir(REVIEW_DIR)
                     if not f.startswith('.') and f not in ['日志.md', '台账.md']
                     and os.path.isfile(os.path.join(REVIEW_DIR, f))])
+    # 递归子目录
+    for root, dirs, filenames in os.walk(REVIEW_DIR):
+        if root == REVIEW_DIR: continue
+        for fn in sorted(filenames):
+            if fn.startswith('.') or fn in ['日志.md', '台账.md']: continue
+            files.append(os.path.relpath(os.path.join(root, fn), REVIEW_DIR))
 
     if not files:
         return [], []
@@ -3182,6 +3238,11 @@ def process_review():
         print(f"\n   💡 标准格式: YYYY-MM-DD_类别_金额.扩展名")
         print(f"   💡 类别: {' | '.join(VALID_CATEGORIES)}")
         print(f"   💡 示例: 2026-03-15_餐饮_358.00.pdf 或 2026-03-15_餐饮_358.00.jpg")
+
+    # 清理空子目录
+    cleaned = _clean_empty_subdirs(REVIEW_DIR)
+    if cleaned:
+        print(f"   🧹 清理空文件夹: {cleaned} 个")
 
     return archived, review_log_entries
 

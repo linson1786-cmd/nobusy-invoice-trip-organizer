@@ -3,7 +3,7 @@ name: invoice-trip-organizer
 description: "行程报销管家——个人行程与报销文件自动化管理。Personal trip and expense document automation. Auto-classify files (PDF/OFD/XML/image OCR), organize trip folders, download from email, generate expense reports. Triggers: 文件识别, 行程整理, 下载发票, 导入, 升级."
 description_zh: "行程报销管家——个人行程与报销文件自动化管理"
 description_en: "Trip Expense Butler — Personal trip and invoice reimbursement automation"
-version: 1.0.37
+version: 1.0.38
 display_name: "行程报销管家"
 display_name_en: "Trip Expense Butler"
 author: linson

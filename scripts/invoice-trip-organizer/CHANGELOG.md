@@ -1,5 +1,21 @@
 # 版本变更日志
 
+## 1.0.38 - 2026-06-27
+
+### 新增
+
+- **机票比价图支持"单程"日期格式** ✈️
+  - OTA 截图常见"单程 4月9日"格式，原日期提取逻辑不识别
+  - `extract_date_for_flight_comparison()` 新增第 8 步：匹配 `单程 + 月日/完整日期`
+  - 支持格式：`单程 4月9日` / `单程 04-09` / `单程 4/9` / `单程 2026-04-09`
+  - "单程"同时加入机票比价图关键词列表，提高分类命中率
+
+### 变更文件
+
+- `invoice_auto_organizer.py`：CATEGORY_RULES 机票比价图加"单程"关键词 + `extract_date_for_flight_comparison()` 加第 8 步
+- `config.py`：CATEGORY_RULES 同步加"单程"关键词
+- `VERSION` / `CHANGELOG.md` / `SKILL.md`：版本三件套更新
+
 ## 1.0.37 - 2026-06-27
 
 ### 修复
