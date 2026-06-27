@@ -1565,12 +1565,23 @@ def extract_route(text, cat):
 def extract_amount_from_text(text):
     # 金额正则：兼容 ¥1129.00（小数）和 ¥1129（整数）两种格式
     _amt = r'([\d,]+(?:\.\d{1,2})?)'
-    # 策略1: 价税合计 + ¥
+    # V1.0.62: 策略1 重写 — 价税合计 前/后/大写 三维搜索
+    # 1a: "价税合计（大写）" 后的第一个 ¥（最准确）
+    m = re.search(r'价税合计[（\(]大写[）\)][\s\S]{0,100}?[¥￥]\s*' + _amt, text)
+    if m:
+        return float(m.group(1).replace(',','')).__format__('.2f')
+    # 1b: "价税合计" 后面200字符，取第一个 ¥（非贪婪）
     for m in re.finditer(r'价税合计[\s\S]{0,200}', text):
         seg = m.group(0)
-        amts = re.findall(r'[¥￥]\s*' + _amt, seg)
+        amt = re.search(r'[¥￥]\s*' + _amt, seg)
+        if amt:
+            return float(amt.group(1).replace(',','')).__format__('.2f')
+    # 1c: "价税合计" 前面200字符，取最后一个 ¥（最接近标签）
+    for m in re.finditer(r'[\s\S]{0,200}价税合计', text):
+        seg = m.group(0)
+        amts = list(re.finditer(r'[¥￥]\s*' + _amt, seg))
         if amts:
-            return max(float(a.replace(',','')) for a in amts).__format__('.2f')
+            return float(amts[-1].group(1).replace(',','')).__format__('.2f')
     # 策略2: 小写金额（¥在后面，如"（ 小 写 ） 177.90 ¥"）
     m = re.search(r'[\(（]\s*小写\s*[)）]\s*' + _amt, text)
     if m:
@@ -1579,8 +1590,8 @@ def extract_amount_from_text(text):
     m = re.search(r'[零壹贰叁肆伍陆柒捌玖拾佰仟万亿圆元整]{2,}[\s]*[¥￥]\s*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
-    # 策略4: (小写)¥
-    m = re.search(r'[\(（]小写[\)）][\s\S]{0,30}[¥￥]\s*' + _amt, text)
+    # V1.0.62: 策略4 非贪婪 — (小写)¥ 取第一个
+    m = re.search(r'[\(（]小写[\)）][\s\S]{0,30}?[¥￥]\s*' + _amt, text)
     if m:
         return m.group(1).replace(',', '')
     # 策略5: ¥金额取最大（支持整数和小数）
@@ -3963,7 +3974,8 @@ def update_ledgers():
             parts = rest.split('_') if rest else []
             route, suffix, op_date, status, seq = '', '', '', 'WB', 0
         else:
-            seq = int(m.group(8))    # group 8 = NNN 序号(末尾)
+            seq_str = m.group(8)
+            seq = int(seq_str) if seq_str else 0    # group 8 = NNN 序号(末尾,可选)
             date = m.group(1)        # group 1 = 日期
             cat = m.group(2)         # group 2 = 类别
             amount = float(m.group(3))  # group 3 = 金额
