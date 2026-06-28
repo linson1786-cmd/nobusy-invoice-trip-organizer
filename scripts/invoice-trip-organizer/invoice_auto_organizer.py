@@ -3230,7 +3230,7 @@ def process_inbox():
         # 比价图金额规则：所有比价图（机票/高铁/住宿）不加金额
         amount_str = "" if "比价图" in cat_label else f"_{amount}"
         new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}{status_suffix}{seq_suffix}{ext}"
-        month_dir = os.path.join(DONE_DIR, date[:7])
+        month_dir = session_dir
         os.makedirs(month_dir, exist_ok=True)
         dst = os.path.join(month_dir, new_name)
 
@@ -3270,6 +3270,11 @@ def process_inbox():
             archived_file_keys.add(f"{date}_{cat_label}_{float(amount):.2f}")
         except:
             pass
+
+    # V1.0.69: 清理 01 待分类 中的空子目录
+    cleaned = _clean_empty_subdirs(INPUT_DIR)
+    if cleaned:
+        print(f"   🧹 清理空文件夹: {cleaned} 个")
 
     return success, review, dup_deleted, inbox_log_entries, session_dir
 
