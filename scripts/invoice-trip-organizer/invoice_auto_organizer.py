@@ -1525,19 +1525,43 @@ def extract_route_for_gaotie(text, cat):
     
     # 提取中文站名
     cn_stations = STATION_CN_RE.findall(text)
-    # 提取英文站名并转中文
-    en_cn_stations = []
+    # V1.0.72: 英文站名最长优先匹配，避免子串误伤
+    en_matches = []
     for en, cn in STATION_EN_MAP.items():
-        if en in text:
-            en_cn_stations.append(cn)
-    all_stations = list(set(cn_stations + en_cn_stations))
+        idx = text.find(en)
+        if idx >= 0:
+            en_matches.append((en, cn, idx, len(en)))
+    # 按长度降序，跳过被更长匹配包含的短名
+    en_matches.sort(key=lambda x: -x[3])
+    en_cn_stations = []
+    covered_ranges = []  # [(start, end),...]
+    for en, cn, idx, length in en_matches:
+        if any(idx >= s and idx < e for s, e in covered_ranges):
+            continue
+        en_cn_stations.append(cn)
+        covered_ranges.append((idx, idx + length))
+    
+    # V1.0.72: 确定性排序（按文本出现位置）
+    raw_stations = cn_stations + en_cn_stations
+    # V1.0.72: 过滤公司名中的城市名 — 如果站名后紧跟3+中文字且不含"站"，视为误匹配
+    valid_stations = []
+    for s in raw_stations:
+        idx = text.find(s)
+        if idx < 0:
+            idx = 0
+        after = text[idx + len(s):idx + len(s) + 10]
+        if len(after) >= 3 and not '站' in after[:3] and re.match(r'^[\u4e00-\u9fff]{3,}', after):
+            if len(s) <= 2 and '站' not in s:  # 短城市名且后面是非站中文 → 公司名
+                continue
+        valid_stations.append(s)
+    
+    all_stations = sorted(set(valid_stations), key=lambda s: text.find(s) if s in text else 999)
     
     if len(all_stations) < 2:
-        # 无足够站点信息
         return None
     
     # 确定方向: 用车次号分隔出发站和到达站
-    train_match = re.search(r'(G\d+|D\d+|C\d+)', text)
+    train_match = re.search(r'(G\d{1,4}|D\d{1,4}|C\d{1,4})', text)
     if train_match and len(all_stations) >= 2:
         train_pos = text.find(train_match.group(1))
         before = text[:train_pos]
@@ -1561,8 +1585,6 @@ def extract_route_for_gaotie(text, cat):
                         break
             pos_map[st] = idx
         sorted_stations = sorted(all_stations, key=lambda s: pos_map.get(s, 999))
-        # 高铁PDF末尾站名顺序通常为: 到达站-出发站 (与视觉相反)
-        # 所以反转顺序
         return f"{sorted_stations[1]}-{sorted_stations[0]}"
     
     return None
@@ -3390,14 +3412,22 @@ def reprocess_done_files():
 
 
 def _clean_empty_subdirs(base_dir):
-    """删除根目录下的空子文件夹"""
+    """删除根目录下的空子文件夹（排除 .DS_Store 等系统隐藏文件）"""
     cleaned = 0
-    if not os.path.isdir(base_dir): return cleared
+    if not os.path.isdir(base_dir): return cleaned
     for name in os.listdir(base_dir):
         path = os.path.join(base_dir, name)
-        if os.path.isdir(path) and not os.listdir(path):
-            os.rmdir(path)
-            cleaned += 1
+        if os.path.isdir(path):
+            # V1.0.72: 过滤隐藏文件后判断是否为空
+            contents = [f for f in os.listdir(path) if not f.startswith('.')]
+            if not contents:
+                for leftover in os.listdir(path):
+                    try:
+                        os.remove(os.path.join(path, leftover))
+                    except OSError:
+                        pass
+                os.rmdir(path)
+                cleaned += 1
     return cleaned
 
 
