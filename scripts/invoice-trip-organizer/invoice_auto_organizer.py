@@ -1585,6 +1585,30 @@ def extract_route(text, cat):
     return None
 
 
+def chinese_upper_to_num(cn_str):
+    """V1.0.66: 中文大写金额转 float
+    例: '壹仟贰佰叁拾肆元伍角陆分' → 1234.56, '肆佰伍拾陆元整' → 456.00"""
+    digits = {'零':0,'壹':1,'贰':2,'叁':3,'肆':4,'伍':5,'陆':6,'柒':7,'捌':8,'玖':9}
+    units = {'拾':10,'佰':100,'仟':1000,'萬':10000,'万':10000,'亿':100000000}
+    total = 0; section = 0; num = 0; has_yuan = False
+    for ch in cn_str:
+        if ch in ('元', '圆'):
+            section += num; total += section; section = 0; num = 0; has_yuan = True
+        elif ch in units:
+            section += (num if num > 0 else 1) * units[ch]; num = 0
+        elif ch in digits:
+            num = digits[ch]
+        elif ch == '角':
+            total += (num if num > 0 else 0) * 0.1; num = 0; has_yuan = True
+        elif ch == '分':
+            total += (num if num > 0 else 0) * 0.01; num = 0
+        elif ch in ('整', '正'):
+            pass
+    if not has_yuan:
+        total += section + num
+    return round(total, 2)
+
+
 def _build_field_index(text):
     """V1.0.65: 从发票文本提取所有金额字段，构建统一索引
     
@@ -1594,12 +1618,29 @@ def _build_field_index(text):
     idx = {}
     _amt = r'([\d,]+\.?\d{0,2})'
     
-    # (小写) — 最可靠的价税合计标识
-    m = re.search(r'[（\(]小写[）\)][：:\s]*[¥￥]?\s*' + _amt, text)
-    if m:
-        v = float(m.group(1).replace(',', ''))
-        if 1 <= v <= 50000:
-            idx['小写'] = v
+    # V1.0.66: (小写) — 4种正则变体覆盖不同发票格式
+    patterns_lower = [
+        r'[(（]\s*小写\s*[)）][\s\S]{0,150}?[¥￥]?\s*' + _amt,
+        r'价税合计[(（]\s*小写\s*[)）][\s\S]{0,150}?[¥￥]?\s*' + _amt,
+        r'小写[：:\s]*[¥￥]?\s*' + _amt,
+    ]
+    for pat in patterns_lower:
+        m = re.search(pat, text)
+        if m:
+            v = float(m.group(1).replace(',', ''))
+            if 1 <= v <= 50000:
+                idx['小写'] = v
+                break
+    # 变体4: 仅变体1-3未匹配时的降级
+    if '小写' not in idx:
+        m = re.search(r'[(（]\s*小写\s*[)）]', text)
+        if m:
+            seg = text[m.end():m.end()+300]
+            m2 = re.search(r'([\d,]+\.\d{2})', seg)
+            if m2:
+                v = float(m2.group(1).replace(',', ''))
+                if 1 <= v <= 50000:
+                    idx['小写'] = v
     
     # 价税合计 — 完整的标签匹配
     m = re.search(r'价税合计[：:\s]*[¥￥]?\s*' + _amt, text)
