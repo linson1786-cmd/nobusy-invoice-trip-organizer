@@ -2179,24 +2179,45 @@ def save_log(log):
 
 # ===== 阶段1: 处理 01 待分类 =====
 
+def _get_session_dir():
+    """V1.0.67: 创建本次运行的会话目录，格式 YYYY-MM-DD-HH-MM-SEQ"""
+    now = datetime.now()
+    prefix = now.strftime('%Y-%m-%d-%H-%M-')
+    max_seq = 0
+    if os.path.isdir(DONE_DIR):
+        for d in os.listdir(DONE_DIR):
+            if d.startswith(prefix) and os.path.isdir(os.path.join(DONE_DIR, d)):
+                try:
+                    seq = int(d.split('-')[-1])
+                    max_seq = max(max_seq, seq)
+                except:
+                    pass
+    return os.path.join(DONE_DIR, f"{prefix}{max_seq + 1}")
+
+
 def process_inbox():
     """处理 01 待分类/ 中的新文件
 
     流程:
     1. OFD预处理: 同发票号有PDF→删OFD; 无PDF→提取OFD数据→转PDF→归档
     2. XML预处理: 同发票号有PDF→删XML; 无PDF→提取XML数据→转PDF→归档
-    3. PDF处理: 提取日期/金额/类别→归档到03已完成或移到02待核实
+    3. PDF处理: 提取日期/金额/类别→归档到本次会话目录
     """
-    global OCR_AVAILABLE
+    global OCR_AVAILABLE, session_dir
     if not os.path.isdir(INPUT_DIR):
-        return [], [], 0, []
+        return [], [], 0, [], ""
+
+    # V1.0.67: 创建本次会话目录
+    session_dir = _get_session_dir()
+    os.makedirs(session_dir, exist_ok=True)
+    print(f"\n📁 本次会话目录: {os.path.basename(session_dir)}")
 
     files = sorted([f for f in os.listdir(INPUT_DIR)
                     if not f.startswith('.')
                     and f not in ['baoxiao.xlsx', '_发票清单.md', '台账.md', '日志.md']])
 
     if not files:
-        return [], [], 0, []
+        return [], [], 0, [], ""
 
     print(f"\n{'='*60}")
     print(f"📥 阶段1: 处理 01 待分类/ ({len(files)} 个文件)")
@@ -2256,8 +2277,9 @@ def process_inbox():
     zs_invoice_index = {}           # 住宿发票反向配对索引: {amount_cities → [(date, filename, seller_name)]}
     # 索引结构改为列表，支持同金额多条结账单/发票（不同城市或不同入住日期）
     if os.path.isdir(DONE_DIR):
-        for month_dir in os.listdir(DONE_DIR):
-            mpath = os.path.join(DONE_DIR, month_dir)
+        # V1.0.67: 遍历所有会话子目录
+        for subfolder in sorted(os.listdir(DONE_DIR)):
+            mpath = os.path.join(DONE_DIR, subfolder)
             if not os.path.isdir(mpath):
                 continue
             for afn in os.listdir(mpath):
@@ -2613,7 +2635,7 @@ def process_inbox():
             # 比价图金额规则：所有比价图（机票/高铁/住宿）不加金额
             amount_str = "" if "比价图" in cat_label else f"_{amount}"
             new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
-            month_dir = os.path.join(DONE_DIR, date[:7])
+            month_dir = session_dir
             os.makedirs(month_dir, exist_ok=True)
             dst = os.path.join(month_dir, new_name)
 
@@ -2862,7 +2884,7 @@ def process_inbox():
             # 比价图金额规则：所有比价图（机票/高铁/住宿）不加金额
             amount_str = "" if "比价图" in cat_label else f"_{amount}"
             new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
-            month_dir = os.path.join(DONE_DIR, date[:7])
+            month_dir = session_dir
             os.makedirs(month_dir, exist_ok=True)
             dst = os.path.join(month_dir, new_name)
 
@@ -3244,7 +3266,7 @@ def process_inbox():
         except:
             pass
 
-    return success, review, dup_deleted, inbox_log_entries
+    return success, review, dup_deleted, inbox_log_entries, session_dir
 
 
 # ===== v1.0.30: 重新识别 02 待核实中的文件 =====
@@ -3622,7 +3644,7 @@ def main():
     migrate_done_lodging_city_names()
 
     # 阶段1: 处理新文件
-    success, review, dup_deleted, inbox_log_entries = process_inbox()
+    success, review, dup_deleted, inbox_log_entries, _session_dir = process_inbox()
 
     # 阶段2: 处理已核实文件
     archived, review_log_entries = process_review()
@@ -4113,18 +4135,22 @@ def update_ledgers():
         ALL_EXTENSIONS = ('.pdf', '.ofd', '.xml', '.xlsx', '.zip',
                           '.jpg', '.jpeg', '.png', '.heic', '.bmp', '.tiff', '.tif', '.webp')
         if is_done:
-            for month_dir in sorted(os.listdir(dir_path)):
-                month_path = os.path.join(dir_path, month_dir)
-                if not os.path.isdir(month_path): continue
-                for fname in sorted(os.listdir(month_path)):
+            # V1.0.67: 遍历所有会话子目录
+            for subfolder in sorted(os.listdir(dir_path)):
+                sub_path = os.path.join(dir_path, subfolder)
+                if not os.path.isdir(sub_path):
+                    continue
+                # 提取会话目录的日期部分作为 month 标签（YYYY-MM）
+                session_month = subfolder[:7] if len(subfolder) >= 7 else subfolder
+                for fname in sorted(os.listdir(sub_path)):
                     if fname.startswith('.') or not fname.endswith(ALL_EXTENSIONS): continue
                     info = parse_filename(fname)
                     if info:
-                        info['month'] = month_dir
+                        info['month'] = session_month
                         records.append(info)
                     else:
                         records.append({'date': '', 'cat': '', 'amount': 0, 'route': '', 'suffix': '',
-                                        'reimburse': True, 'filename': fname, 'month': month_dir})
+                                        'reimburse': True, 'filename': fname, 'month': session_month})
         else:
             if not os.path.isdir(dir_path): return records
             for fname in sorted(os.listdir(dir_path)):

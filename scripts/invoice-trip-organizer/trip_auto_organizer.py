@@ -278,25 +278,19 @@ graph LR
 
 
 def scan_done_invoices(start_date, end_date):
-    """扫描03已完成中日期范围内的发票"""
+    """扫描03已完成中日期范围内的发票
+    V1.0.67: 改为扫描所有会话子目录（非月度目录）"""
     matched = []
     start_dt = datetime.strptime(start_date, '%Y-%m-%d')
     end_dt = datetime.strptime(end_date, '%Y-%m-%d')
 
-    for month_folder in sorted(os.listdir(DONE_DIR)):
-        month_path = os.path.join(DONE_DIR, month_folder)
-        if not os.path.isdir(month_path):
-            continue
-        # 检查月份是否在范围内
-        try:
-            month_dt = datetime.strptime(month_folder, '%Y-%m')
-        except:
-            continue
-        # 月份范围检查（宽松：开始月前1月到结束月后1月）
-        if month_dt < start_dt - timedelta(days=31) or month_dt > end_dt + timedelta(days=31):
+    # V1.0.67: 遍历所有子目录
+    for subfolder in sorted(os.listdir(DONE_DIR)):
+        sub_path = os.path.join(DONE_DIR, subfolder)
+        if not os.path.isdir(sub_path):
             continue
 
-        for fname in sorted(os.listdir(month_path)):
+        for fname in sorted(os.listdir(sub_path)):
             m = STANDARD_NAME_RE.match(fname)
             if m:
                 inv_date = m.group(1)
@@ -325,7 +319,7 @@ def scan_done_invoices(start_date, end_date):
             if inv_dt < start_dt or inv_dt > end_dt:
                 continue
 
-            src = os.path.join(month_path, fname)
+            src = os.path.join(sub_path, fname)
             matched.append({
                 'date': inv_date,
                 'category': category,
@@ -391,11 +385,9 @@ def copy_invoices_to_trip(matched, trip_dir, clear_existing=False):
 def copy_dining_to_monthly(year, month):
     """将整个月份的餐饮类发票复制到月度餐饮目录。
     目录结构: {TRIP_ROOT}/{year} 年/{month} 月/餐饮/
-    V1.0.61: 扫描整个月份（不依赖行程 matched），确保所有餐饮发票都被复制"""
-    # 构造月份文件夹名
+    V1.0.67: 扫描所有会话子目录，按发票文件名日期筛选月份"""
     month_str = f"{int(month):02d}"
-    month_folder = f"{year}-{month_str}"
-    month_path = os.path.join(DONE_DIR, month_folder)
+    date_prefix = f"{year}-{month_str}"
 
     year_dir = os.path.join(TRIP_ROOT, f"{year} 年")
     month_dir = os.path.join(year_dir, f"{int(month)} 月")
@@ -409,19 +401,21 @@ def copy_dining_to_monthly(year, month):
                 os.remove(old_path)
         print(f"   🧹 已清空 {int(month)} 月/餐饮/ 目录")
 
-    if not os.path.isdir(month_path):
-        print(f"   ℹ️ 03 已完成 中无 {month_folder} 目录")
-        return 0
-
-    # 扫描该月份所有餐饮发票
+    # V1.0.67: 遍历所有会话子目录
     dining_items = []
-    for fname in sorted(os.listdir(month_path)):
-        m = STANDARD_NAME_RE.match(fname)
-        if m and m.group(2) == '餐饮':
-            dining_items.append({
-                'filename': fname,
-                'src_path': os.path.join(month_path, fname),
-            })
+    for subfolder in sorted(os.listdir(DONE_DIR)):
+        sub_path = os.path.join(DONE_DIR, subfolder)
+        if not os.path.isdir(sub_path):
+            continue
+        for fname in sorted(os.listdir(sub_path)):
+            if not fname.startswith(date_prefix):
+                continue
+            m = STANDARD_NAME_RE.match(fname)
+            if m and m.group(2) == '餐饮':
+                dining_items.append({
+                    'filename': fname,
+                    'src_path': os.path.join(sub_path, fname),
+                })
 
     if not dining_items:
         print(f"   ℹ️ {int(month)} 月无餐饮类发票")
