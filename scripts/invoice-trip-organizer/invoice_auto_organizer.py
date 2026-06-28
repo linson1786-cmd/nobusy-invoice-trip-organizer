@@ -10,7 +10,7 @@
   - 02 待核实: 用户手动核实后，把文件名改成标准格式，脚本检测到自动归档
     判断"已核实"的标准 = 文件名符合 YYYY-MM-DD_类别_金额.扩展名 格式
 """
-import os, re, sys, shutil, json, zipfile, xml.etree.ElementTree as ET
+import os, re, sys, shutil, subprocess, json, zipfile, xml.etree.ElementTree as ET
 from collections import defaultdict
 from datetime import datetime
 from pdfminer.high_level import extract_text as pdfminer_extract_text
@@ -235,19 +235,35 @@ def extract_image_text(filepath):
     使用pytesseract(Pillow+Tesseract OCR)识别图片中的文字。
     支持中文+英文混合识别(lang='chi_sim+eng')。
     若OCR不可用或识别失败，返回空字符串（文件将移至02待核实）。
+    V1.0.63: Pillow 兼容性降级 — 无法直接打开时用 sips 转 PNG 再 OCR
     """
     if not OCR_AVAILABLE or not PIL_AVAILABLE:
         return ""
     try:
         img = Image.open(filepath)
-        # HEIC格式需要额外处理(有些PIL版本不支持直接读取)
-        # 转换为RGB模式确保兼容性
         if img.mode not in ('RGB', 'L', '1'):
             img = img.convert('RGB')
-        # 使用中文+英文混合识别
         text = pytesseract.image_to_string(img, lang='chi_sim+eng')
         return text.strip()
     except Exception as e:
+        # V1.0.63: Pillow 无法打开某些 JPEG 变体，用 macOS sips 转换后重试
+        if 'image file is truncated' in str(e) or 'Unsupported' in str(e):
+            import tempfile
+            try:
+                fd, tmp_path = tempfile.mkstemp(suffix='.png')
+                os.close(fd)
+                subprocess.run(['sips', '-s', 'format', 'png', filepath, '--out', tmp_path],
+                              capture_output=True, timeout=30)
+                if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 100:
+                    img2 = Image.open(tmp_path)
+                    if img2.mode not in ('RGB', 'L', '1'):
+                        img2 = img2.convert('RGB')
+                    text = pytesseract.image_to_string(img2, lang='chi_sim+eng')
+                    os.remove(tmp_path)
+                    return text.strip()
+                os.remove(tmp_path)
+            except:
+                pass
         print(f"   ⚠️ OCR识别失败: {e}")
         return ""
 
