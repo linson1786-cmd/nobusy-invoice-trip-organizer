@@ -2207,10 +2207,15 @@ def process_inbox():
     if not os.path.isdir(INPUT_DIR):
         return [], [], 0, [], ""
 
-    # V1.0.67: 创建本次会话目录
-    session_dir = _get_session_dir()
-    os.makedirs(session_dir, exist_ok=True)
-    print(f"\n📁 本次会话目录: {os.path.basename(session_dir)}")
+    # V1.0.70: 延迟创建 — 有文件成功归档时才创建会话目录
+    _session_dir_created = [False]
+    _session_dir = [None]
+    def ensure_session_dir():
+        if not _session_dir_created[0]:
+            _session_dir[0] = _get_session_dir()
+            os.makedirs(_session_dir[0], exist_ok=True)
+            _session_dir_created[0] = True
+        return _session_dir[0]
 
     # V1.0.68: 递归扫描子目录中的文件
     files = []
@@ -2381,7 +2386,9 @@ def process_inbox():
             "金额异常": "金额异常",
         }
         tag = reason_map.get(short, short[:8])
-        name, ext = os.path.splitext(filename)
+        # V1.0.69: 用 basename 避免递归子目录路径污染目的地
+        base_name = os.path.basename(filename)
+        name, ext = os.path.splitext(base_name)
         dst = os.path.join(REVIEW_DIR, f"[{tag}]{name}{ext}")
         counter = 1
         while os.path.exists(dst):
@@ -2640,7 +2647,7 @@ def process_inbox():
             # 比价图金额规则：所有比价图（机票/高铁/住宿）不加金额
             amount_str = "" if "比价图" in cat_label else f"_{amount}"
             new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
-            month_dir = session_dir
+            month_dir = ensure_session_dir()
             os.makedirs(month_dir, exist_ok=True)
             dst = os.path.join(month_dir, new_name)
 
@@ -2889,7 +2896,7 @@ def process_inbox():
             # 比价图金额规则：所有比价图（机票/高铁/住宿）不加金额
             amount_str = "" if "比价图" in cat_label else f"_{amount}"
             new_name = f"{date}_{cat_label}{amount_str}{route_part}{buyer_part}{status_suffix}{seq_suffix}{out_ext}"
-            month_dir = session_dir
+            month_dir = ensure_session_dir()
             os.makedirs(month_dir, exist_ok=True)
             dst = os.path.join(month_dir, new_name)
 
@@ -3276,7 +3283,7 @@ def process_inbox():
     if cleaned:
         print(f"   🧹 清理空文件夹: {cleaned} 个")
 
-    return success, review, dup_deleted, inbox_log_entries, session_dir
+    return success, review, dup_deleted, inbox_log_entries, _session_dir[0] or ""
 
 
 # ===== v1.0.30: 重新识别 02 待核实中的文件 =====
