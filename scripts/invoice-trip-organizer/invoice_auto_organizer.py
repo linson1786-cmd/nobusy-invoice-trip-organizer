@@ -2212,9 +2212,14 @@ def process_inbox():
     os.makedirs(session_dir, exist_ok=True)
     print(f"\n📁 本次会话目录: {os.path.basename(session_dir)}")
 
-    files = sorted([f for f in os.listdir(INPUT_DIR)
-                    if not f.startswith('.')
-                    and f not in ['baoxiao.xlsx', '_发票清单.md', '台账.md', '日志.md']])
+    # V1.0.68: 递归扫描子目录中的文件
+    files = []
+    for root, dirs, filenames in os.walk(INPUT_DIR):
+        for fn in filenames:
+            if fn.startswith('.') or fn in ['baoxiao.xlsx', '_发票清单.md', '台账.md', '日志.md']:
+                continue
+            files.append(os.path.relpath(os.path.join(root, fn), INPUT_DIR))
+    files = sorted(files)
 
     if not files:
         return [], [], 0, [], ""
