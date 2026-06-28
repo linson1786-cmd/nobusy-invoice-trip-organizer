@@ -1343,7 +1343,7 @@ def extract_lodging_city(text):
     return cities[0] if cities else None
 
 
-def extract_stay_date_from_text(text):
+def extract_stay_date_from_text(text, filename=""):
     """住宿发票专用：提取入住日期（优先级高于开票日期）
     
     住宿发票的开票日期可能延后数月，入住日期才是真实发生日期。
@@ -1351,7 +1351,8 @@ def extract_stay_date_from_text(text):
     1. 明确的入住日期字段 (如 "入住日期：2026年01月05日")
     2. 日期范围中的入住日期 (如 "2026/01/05-2026/01/06")
     3. 备注/项目描述中的入住日期
-    4. 无入住日期时返回None，使用开票日期或配对推断
+    4. 文件名降级: 从文件名提取日期 (V1.0.64)
+    5. 无入住日期时返回None，使用开票日期或配对推断
     """
     if not text:
         return None, "无文本"
@@ -1388,6 +1389,12 @@ def extract_stay_date_from_text(text):
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
             return f"{y}-{mo:02d}-{d:02d}", "项目描述日期"
+    
+    # 5. 文件名降级: 标准格式文件名含日期 (V1.0.64)
+    if filename:
+        m = re.search(r'^(\d{4}-\d{2}-\d{2})_', filename)
+        if m:
+            return m.group(1), "文件名降级"
     
     return None, "无入住日期"
 
@@ -2337,7 +2344,7 @@ def process_inbox():
             # 住宿类: 优先入住日期，其次配对推断，最后开票日期 (SOP v3.23→v3.25)
             # v3.25: 结账单始终做反向配对提示(找03已完成中的发票)
             if cat == "住宿" and amount:
-                stay_date, stay_source = extract_stay_date_from_text(text)
+                stay_date, stay_source = extract_stay_date_from_text(text, f)
                 if cat_label == "住宿(结账单)":  # 结账单: 反向配对找发票
                     # v3.25: 始终做反向配对提示
                     inv_date, inv_fn, inv_seller = find_matching_invoice_for_checkout(
@@ -2636,7 +2643,7 @@ def process_inbox():
             # 住宿类: 优先入住日期，其次配对推断，最后开票日期 (SOP v3.25)
             # v3.25: 结账单始终做反向配对提示(找03已完成中的发票)
             if cat == "住宿" and amount:
-                stay_date, stay_source = extract_stay_date_from_text(text)
+                stay_date, stay_source = extract_stay_date_from_text(text, f)
                 if cat_label == "住宿(结账单)":  # 结账单: 反向配对找发票
                     # v3.25: 始终做反向配对提示
                     inv_date, inv_fn, inv_seller = find_matching_invoice_for_checkout(

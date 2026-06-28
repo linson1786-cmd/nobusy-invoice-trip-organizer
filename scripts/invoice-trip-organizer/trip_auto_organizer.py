@@ -524,10 +524,20 @@ def update_trip_overview(trip_id, start_date, end_date, route_list, folder_name,
             break
 
     if table_start >= 0:
-        # 插入到表格最后（在空行前）
-        if table_end < 0:
-            table_end = len(lines)
-        lines.insert(table_end, new_row)
+        # V1.0.64: 去重 — 查找是否已存在同出差编号的行，存在则替换
+        trip_prefix = f"| 出差{trip_id} |"
+        existing_idx = -1
+        for i in range(table_start + 2, table_end if table_end < len(lines) else len(lines)):
+            if lines[i].startswith(trip_prefix):
+                existing_idx = i
+                break
+        if existing_idx >= 0:
+            lines[existing_idx] = new_row
+        else:
+            # 插入到表格最后（在空行前）
+            if table_end < 0:
+                table_end = len(lines)
+            lines.insert(table_end, new_row)
     else:
         # 没找到表格，追加
         if not md.strip().endswith('|----------|'):
