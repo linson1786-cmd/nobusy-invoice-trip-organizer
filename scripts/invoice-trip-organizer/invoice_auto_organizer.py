@@ -1543,9 +1543,12 @@ def extract_route_for_gaotie(text, cat):
     
     # V1.0.72: 确定性排序（按文本出现位置）
     raw_stations = cn_stations + en_cn_stations
-    # V1.0.72: 过滤公司名中的城市名 — 如果站名后紧跟3+中文字且不含"站"，视为误匹配
+    # V1.0.73: 过滤公司名中的城市名 — 英文映射确认的车站跳过过滤（铁路编码不可伪造）
     valid_stations = []
     for s in raw_stations:
+        if s in en_cn_stations:
+            valid_stations.append(s)       # 英文映射确认 → 真实车站，跳过过滤
+            continue
         idx = text.find(s)
         if idx < 0:
             idx = 0
