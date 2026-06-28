@@ -1585,85 +1585,141 @@ def extract_route(text, cat):
     return None
 
 
-def extract_amount_from_text(text):
-    # 金额正则：兼容 ¥1129.00（小数）和 ¥1129（整数）两种格式
-    _amt = r'([\d,]+(?:\.\d{1,2})?)'
-    # V1.0.62: 策略1 重写 — 价税合计 前/后/大写 三维搜索
-    # 1a: "价税合计（大写）" 后的第一个 ¥（最准确）
-    m = re.search(r'价税合计[（\(]大写[）\)][\s\S]{0,100}?[¥￥]\s*' + _amt, text)
+def _build_field_index(text):
+    """V1.0.65: 从发票文本提取所有金额字段，构建统一索引
+    
+    返回 {字段名: 金额(float)}，如:
+    {'小写': 456.0, '价税合计': 456.0, '不含税': 403.54, '增值税': 52.46}
+    """
+    idx = {}
+    _amt = r'([\d,]+\.?\d{0,2})'
+    
+    # (小写) — 最可靠的价税合计标识
+    m = re.search(r'[（\(]小写[）\)][：:\s]*[¥￥]?\s*' + _amt, text)
     if m:
-        return float(m.group(1).replace(',','')).__format__('.2f')
-    # 1b: "价税合计" 后面200字符，取第一个 ¥（非贪婪）
-    for m in re.finditer(r'价税合计[\s\S]{0,200}', text):
-        seg = m.group(0)
-        amt = re.search(r'[¥￥]\s*' + _amt, seg)
-        if amt:
-            return float(amt.group(1).replace(',','')).__format__('.2f')
-    # 1c: "价税合计" 前面200字符，取最后一个 ¥（最接近标签）
-    for m in re.finditer(r'[\s\S]{0,200}价税合计', text):
-        seg = m.group(0)
-        amts = list(re.finditer(r'[¥￥]\s*' + _amt, seg))
-        if amts:
-            return float(amts[-1].group(1).replace(',','')).__format__('.2f')
-    # 策略2: 小写金额（¥在后面，如"（ 小 写 ） 177.90 ¥"）
-    m = re.search(r'[\(（]\s*小写\s*[)）]\s*' + _amt, text)
+        v = float(m.group(1).replace(',', ''))
+        if 1 <= v <= 50000:
+            idx['小写'] = v
+    
+    # 价税合计 — 完整的标签匹配
+    m = re.search(r'价税合计[：:\s]*[¥￥]?\s*' + _amt, text)
     if m:
-        return m.group(1).replace(',', '')
-    # 策略3: 大写+¥小写
+        v = float(m.group(1).replace(',', ''))
+        if 1 <= v <= 50000:
+            idx['价税合计'] = v
+    
+    # 不含税金额
+    m = re.search(r'不含税金额[：:\s]*[¥￥]?\s*' + _amt, text)
+    if m:
+        v = float(m.group(1).replace(',', ''))
+        if 1 <= v <= 50000:
+            idx['不含税'] = v
+    
+    # 增值税额
+    m = re.search(r'增值税额[：:\s]*[¥￥]?\s*' + _amt, text)
+    if m:
+        v = float(m.group(1).replace(',', ''))
+        if 1 <= v <= 50000:
+            idx['增值税'] = v
+    
+    # 大写金额 + ¥ (如 "肆佰伍拾陆元整 ¥456.00")
     m = re.search(r'[零壹贰叁肆伍陆柒捌玖拾佰仟万亿圆元整]{2,}[\s]*[¥￥]\s*' + _amt, text)
     if m:
-        return m.group(1).replace(',', '')
-    # V1.0.62: 策略4 非贪婪 — (小写)¥ 取第一个
-    m = re.search(r'[\(（]小写[\)）][\s\S]{0,30}?[¥￥]\s*' + _amt, text)
+        v = float(m.group(1).replace(',', ''))
+        if 1 <= v <= 50000:
+            idx['大写'] = v
+    
+    # 消费合计（结账单）
+    m = re.search(r'消费合计[\s\n]*' + _amt, text)
     if m:
-        return m.group(1).replace(',', '')
-    # 策略5: ¥金额取最大（支持整数和小数）
-    # V1.0.36 Bug 5: 过滤"起"后缀（如 ¥1290起），取数字部分
-    # V1.0.36 Bug 5: 过滤 >50000 的天文数字（OCR粘连导致）
+        v = float(m.group(1).replace(',', ''))
+        if 1 <= v <= 50000:
+            idx['消费合计'] = v
+    
+    # 合计X元（行程单）
+    m = re.search(r'合计\s*' + _amt + r'\s*元', text)
+    if m:
+        v = float(m.group(1).replace(',', ''))
+        if 1 <= v <= 50000:
+            idx['合计'] = v
+    
+    # 金额(元) / 交易金额(元) 格式（高速费）
+    for p in [r'金额[（(]元[）)][：:\s]*' + _amt, r'交易金额[（(]元[）)][：:\s]*' + _amt]:
+        m = re.search(p, text)
+        if m:
+            v = float(m.group(1).replace(',', ''))
+            if 1 <= v <= 50000 and '金额' not in idx:
+                idx['金额'] = v
+    
+    return idx
+
+
+def extract_amount_from_text(text):
+    """V1.0.65: 字段索引法 — 统一优先级提取金额
+    
+    优先级:
+    1. (小写) — 最可靠
+    2. 价税合计（含交叉验证：不含税+增值税=价税合计）
+    3. 大写金额
+    4. 消费合计 / 合计 / 金额
+    5. 降级: ¥金额取最大 + 总价/订单金额
+    """
+    idx = _build_field_index(text)
+    _amt = r'([\d,]+(?:\.\d{1,2})?)'
+    
+    # 优先级1: (小写)
+    if '小写' in idx:
+        return f"{idx['小写']:.2f}"
+    
+    # 优先级2: 价税合计（带交叉验证）
+    if '价税合计' in idx:
+        if '不含税' in idx and '增值税' in idx:
+            expected = idx['不含税'] + idx['增值税']
+            if abs(expected - idx['价税合计']) < 0.05:
+                return f"{idx['价税合计']:.2f}"
+        return f"{idx['价税合计']:.2f}"
+    
+    # 优先级3: 大写金额
+    if '大写' in idx:
+        return f"{idx['大写']:.2f}"
+    
+    # 优先级4: 消费合计/合计/金额
+    for k in ['消费合计', '合计', '金额']:
+        if k in idx:
+            return f"{idx[k]:.2f}"
+    
+    # 降级1: ¥金额取最大
     amounts = re.findall(r'[¥￥]\s*' + _amt + r'起?', text)
     if amounts:
         nums = [float(a.replace(',', '').rstrip('起')) for a in amounts]
-        nums = [n for n in nums if 1 <= n <= 50000]  # 过滤异常值
+        nums = [n for n in nums if 1 <= n <= 50000]
         if nums:
             return f"{max(nums):.2f}"
-    # V1.0.36 Bug 5: 支持 ¥xxx+¥yyy 复合价格（OTA截图格式）
+    
+    # 降级2: ¥xxx+¥yyy 复合价格（OTA截图）
     m = re.search(r'[¥￥]\s*' + _amt + r'\s*[+＋]\s*[¥￥]?\s*' + _amt, text)
     if m:
         try:
-            v1 = float(m.group(1).replace(',', ''))
-            v2 = float(m.group(2).replace(',', ''))
-            total = v1 + v2
+            total = float(m.group(1).replace(',', '')) + float(m.group(2).replace(',', ''))
             if 1 <= total <= 50000:
                 return f"{total:.2f}"
         except:
             pass
-    # 策略5b: 总价/订单金额/票价 + 整数或小数（预订截图等非发票文件）
+    
+    # 降级3: 总价/订单金额/票价
     m = re.search(r'(?:总价|订单金额|票价|总金额|合计金额|实付)[：:\s]*[¥￥]?\s*' + _amt + r'起?', text)
     if m:
         val = float(m.group(1).replace(',', '').rstrip('起'))
         if 1 <= val <= 50000:
             return f"{val:.2f}"
-    # 策略6: 消费合计（结账单，多行分隔）
-    m = re.search(r'消费合计[\s\n]*' + _amt, text)
-    if m:
-        return m.group(1).replace(',', '')
-    # 策略7: 合计X元（行程单）
-    m = re.search(r'合计' + _amt + r'元', text)
-    if m:
-        return m.group(1).replace(',', '')
-    # 策略8: 金额（元）/ 交易金额(元) 格式（高速费通行费等）
-    m = re.search(r'金额[（(]元[）)][：:\s]*' + _amt, text)
-    if m:
-        return m.group(1).replace(',', '')
-    m = re.search(r'交易金额[（(]元[）)][：:\s]*' + _amt, text)
-    if m:
-        return m.group(1).replace(',', '')
-    # 策略9: 所有数字金额取最大（>10，避免提取序号等）— 仅小数，防止整数误匹配
+    
+    # 最后降级: 所有 .XX 金额取最大（>10）
     amts = re.findall(r'([\d,]+\.\d{2})', text)
     if amts:
         nums = [float(a.replace(',', '')) for a in amts if float(a.replace(',', '')) > 10]
         if nums:
             return f"{max(nums):.2f}"
+    
     return None
 
 
