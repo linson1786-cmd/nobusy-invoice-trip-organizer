@@ -3764,6 +3764,113 @@ def main():
     if success:
         link_to_trips(success)
 
+    # V1.0.75: 同步行程副本（修复重分类后行程残留旧副本问题）
+    if success:
+        sync_trip_copies()
+
+
+def sync_trip_copies():
+    """V1.0.75: 同步行程副本 — 对比03已完成与行程文件夹，清理旧副本+补充缺失文件。
+    
+    按 WB 序号（文件名中 _WB_NNN 部分）精确匹配。
+    解决: 03已完成文件重命名（如类别修正）后，行程文件夹残留旧副本的问题。
+    """
+    # 构建 03 已完成 索引: {wb_key: (filename, src_path, category)}
+    done_index = {}
+    for subfolder in sorted(os.listdir(DONE_DIR)):
+        sub_path = os.path.join(DONE_DIR, subfolder)
+        if not os.path.isdir(sub_path):
+            continue
+        for fname in os.listdir(sub_path):
+            m = re.search(r'_(\d{4})_WB_(\d{3})\.\w+$', fname)
+            if not m:
+                continue
+            wb_key = f"WB_{m.group(2)}"
+            cat_match = re.search(r'^\d{4}-\d{2}-\d{2}_([^_]+(?:_[^_]+)?)_', fname)
+            category = cat_match.group(1) if cat_match else ""
+            done_index[wb_key] = {
+                'filename': fname, 'src_path': os.path.join(sub_path, fname), 'category': category
+            }
+
+    year_dir = os.path.join(TRIP_ROOT, "2026 年")
+    if not os.path.isdir(year_dir):
+        return
+
+    cleaned = 0; copied = 0
+    for month_name in sorted(os.listdir(year_dir)):
+        month_dir = os.path.join(year_dir, month_name)
+        if not os.path.isdir(month_dir):
+            continue
+        for folder in os.listdir(month_dir):
+            trip_dir = os.path.join(month_dir, folder)
+            inv_dir = os.path.join(trip_dir, '02-发票文件')
+            if not os.path.isdir(inv_dir):
+                continue
+
+            # 解析行程日期范围
+            trip_m = re.match(r'出差\d+-(\d{4}-\d{2}-\d{2})～(\d{4}-\d{2}-\d{2})', folder)
+            trip_start = trip_m.group(1) if trip_m else ""
+            trip_end = trip_m.group(2) if trip_m else ""
+
+            # 遍历所有附件子目录
+            for subdir in sorted(os.listdir(inv_dir)):
+                sub_path = os.path.join(inv_dir, subdir)
+                if not os.path.isdir(sub_path):
+                    continue
+                for fname in sorted(os.listdir(sub_path)):
+                    fp = os.path.join(sub_path, fname)
+                    if not os.path.isfile(fp):
+                        continue
+                    m_wb = re.search(r'_(\d{4})_WB_(\d{3})\.\w+$', fname)
+                    if not m_wb:
+                        continue
+                    wb_key = f"WB_{m_wb.group(2)}"
+                    info = done_index.get(wb_key)
+                    if not info:
+                        os.remove(fp)
+                        cleaned += 1
+                        print(f"   🧹 清理过期副本: {folder}/{subdir}/{fname}")
+                        continue
+                    if info['filename'] != fname:
+                        os.remove(fp)
+                        cleaned += 1
+                        dest = os.path.join(sub_path, info['filename'])
+                        if not os.path.exists(dest):
+                            shutil.copy2(info['src_path'], dest)
+                            copied += 1
+                        print(f"   🔄 更新副本: {info['filename']} → {folder}/{subdir}/")
+
+            # 补充缺失文件
+            if trip_start and trip_end:
+                cat_to_subdir = {
+                    "机票": "机票高铁", "机票(保险)": "机票高铁", "机票比价图": "机票高铁",
+                    "高铁": "机票高铁", "高铁比价图": "机票高铁",
+                    "住宿": "住宿", "住宿(结账单)": "住宿", "住宿比价图": "住宿",
+                    "餐饮": "餐饮", "滴滴打车": "打车", "滴滴打车(行程单)": "打车",
+                    "礼品": "礼品", "高速费": "其他", "高速费(行程单)": "其他",
+                    "充电费": "其他", "油电类": "其他", "行程单": "其他", "结账单": "其他", "其他": "其他",
+                }
+                for info in done_index.values():
+                    dm = re.match(r'^(\d{4}-\d{2}-\d{2})_', info['filename'])
+                    if not dm:
+                        continue
+                    if dm.group(1) < trip_start or dm.group(1) > trip_end:
+                        continue
+                    if info['category'] == '餐饮':
+                        continue
+                    sd = cat_to_subdir.get(info['category'], '其他')
+                    dd = os.path.join(inv_dir, sd)
+                    os.makedirs(dd, exist_ok=True)
+                    d = os.path.join(dd, info['filename'])
+                    if not os.path.exists(d):
+                        shutil.copy2(info['src_path'], d)
+                        copied += 1
+
+    if cleaned:
+        print(f"   🧹 清理过期副本: {cleaned} 个")
+    if copied:
+        print(f"   ✅ 补充缺失副本: {copied} 个")
+
 
 def link_to_trips(success_list):
     """将新归档发票自动关联到已有行程，复制到对应附件目录"""
